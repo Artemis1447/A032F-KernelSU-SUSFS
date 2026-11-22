@@ -1,0 +1,11 @@
+name: Run a3core
+on:
+  push:
+    paths:
+      - 'trigger/**'
+  workflow_dispatch:
+jobs:
+  build:
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      config: config/a3core-a032f-v4.env
