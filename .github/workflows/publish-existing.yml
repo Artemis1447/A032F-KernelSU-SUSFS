@@ -47,5 +47,5 @@ jobs:
 
             Plik Image* to sam obraz jadra do wlasnego boot.img.
 
-            Zrodlo: https://github.com/Artemis1447/KernelSU_Action/actions/runs/45131827540
+            Zrodlo: https://github.com/Artemis1447/A032F-KernelSU-SUSFS/actions/runs/45131827540
           files: release/*
