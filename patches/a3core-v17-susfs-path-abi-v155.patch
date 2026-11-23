@@ -115,7 +115,7 @@ index 2d95768..e38cd60 100644
  	struct st_susfs_sus_path_hlist *entry;
  
 diff --git a/include/linux/susfs.h b/include/linux/susfs.h
-index ef31283..e3e8bd2 100644
+index ef31283..26f96a3 100644
 --- a/include/linux/susfs.h
 +++ b/include/linux/susfs.h
 @@ -6,6 +6,8 @@
@@ -135,7 +135,7 @@ index ef31283..e3e8bd2 100644
  int susfs_sus_ino_for_filldir64(unsigned long ino);
  #endif
  /* sus_mount */
-@@ -183,4 +186,50 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
+@@ -183,4 +186,51 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
  /* susfs_init */
  void susfs_init(void);
  
@@ -152,6 +152,7 @@ index ef31283..e3e8bd2 100644
 +#define SUSFS_V155_LACKS_NO_SU 1
 +#define SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT 1
 +#define SUSFS_V155_LACKS_EXTRA_WORKS 1
++#define SUSFS_V155_LACKS_SUS_TYPE 1
 +
 +static inline void susfs_set_current_proc_umounted(void)
 +{

@@ -1,5 +1,5 @@
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index f458e56..60081cc 100644
+index f458e56..e913aaf 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -74,7 +74,9 @@ int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *arg
@@ -12,6 +12,27 @@ index f458e56..60081cc 100644
          // - marking proc umounted here is useless because only zygote spawned processes will umount
          //   the sus mounts, tho other susfs features still rely on proc_umounted check, but
          //   it is fine to not spoof for init spawned processes.
+@@ -367,12 +369,18 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
+     return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
+ }
+ 
+-// dead code
++#endif
++
++/*
++ * The a3core vendor tree hooks devpts_get_priv() under CONFIG_KSU and calls
++ * ksu_handle_devpts(); keep this (dead) stub defined whenever the KSU tree is
++ * built -- not only with CONFIG_KSU_FEATURE_ADBROOT -- or vmlinux fails to
++ * link with an undefined symbol.
++ */
+ int __maybe_unused ksu_handle_devpts(struct inode *inode)
+ {
+     return 0;
+ }
+-#endif
+ 
+ // sucompat: permitted process can execute 'su' to gain root access.
+ void __init ksu_sucompat_init(void)
 diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
 index cf05225..4f7cf64 100644
 --- a/kernel/hook/lsm_hook.c
@@ -146,6 +167,35 @@ index 6f73a74..28ec338 100644
      mutex_lock(&selinux_state.policy_mutex);
  
      old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
+diff --git a/kernel/selinux/sepolicy.c b/kernel/selinux/sepolicy.c
+index 6b4e0ef..841609a 100644
+--- a/kernel/selinux/sepolicy.c
++++ b/kernel/selinux/sepolicy.c
+@@ -330,9 +330,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
+                 return false;
+         }
+ 
+-#ifdef CONFIG_KSU_SUSFS
++/* SUSFS v1.5.5 has no SELinux type-hiding API; out of the V17 subset. */
++#if defined(CONFIG_KSU_SUSFS) && !defined(SUSFS_V155_LACKS_SUS_TYPE)
+         susfs_add_sus_avd_allowed_by_type(src->value, tgt->value, cls->value, node->datum.u.data);
+-#endif // #ifdef CONFIG_KSU_SUSFS
++#endif
+ 
+         if (invert) {
+             if (perm)
+@@ -757,9 +758,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
+         ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
+     }
+ 
+-#ifdef CONFIG_KSU_SUSFS
++#if defined(CONFIG_KSU_SUSFS) && !defined(SUSFS_V155_LACKS_SUS_TYPE)
+     susfs_add_sus_type(type_name, type->value);
+-#endif // #ifdef CONFIG_KSU_SUSFS
++#endif
+     return true;
+ 
+ #elif defined(KSU_TYPE_VAL_TO_STRUCT_ARRAY)
 diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
 index 4948cdf..11d2b82 100644
 --- a/kernel/sulog/event.c
