@@ -188,6 +188,9 @@ jobs:
       - name: Build kernel
         run: bash scripts/build.sh all
 
+      - name: Export ABI diagnostics
+        run: bash scripts/export-abi-diagnostics.sh
+
       - name: Package artifacts
         run: bash scripts/package.sh all
 
@@ -211,10 +214,18 @@ jobs:
           if-no-files-found: error
 
       - name: Upload AnyKernel3
+        if: env.MAKE_ANYKERNEL3_IS_OK == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: AnyKernel3${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
           path: kernel_workspace/AnyKernel3/*
+          if-no-files-found: error
+
+      - name: Upload ABI diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: ABI-diagnostics-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+          path: kernel_workspace/abi-diagnostics/*
           if-no-files-found: error
 
       - name: Upload DTBO image

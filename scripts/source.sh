@@ -19,6 +19,28 @@ retry 3 git clone -q --recursive --depth=1 \
 	-b "$KERNEL_SOURCE_BRANCH" "$KERNEL_SOURCE" "$KERNEL_DIR" \
 	|| die "failed to clone ${KERNEL_SOURCE}"
 
+if [ -n "${KERNEL_SOURCE_COMMIT:-}" ]; then
+	requested_commit=${KERNEL_SOURCE_COMMIT,,}
+	current_commit=$(git -C "$KERNEL_DIR" rev-parse HEAD)
+	if [ "$current_commit" != "$requested_commit" ]; then
+		git -C "$KERNEL_DIR" fetch -q --no-tags --depth=1 origin "$requested_commit" \
+			|| die "failed to fetch pinned kernel commit ${requested_commit}"
+		git -C "$KERNEL_DIR" checkout -q --detach FETCH_HEAD \
+			|| die "failed to check out pinned kernel commit ${requested_commit}"
+		git -C "$KERNEL_DIR" submodule update --init --recursive \
+			|| die "failed to update submodules for ${requested_commit}"
+	fi
+
+	actual_commit=$(git -C "$KERNEL_DIR" rev-parse HEAD)
+	[ "$actual_commit" = "$requested_commit" ] \
+		|| die "kernel source resolved to ${actual_commit}, not requested ${requested_commit}"
+	export_env KERNEL_SOURCE_COMMIT_RESOLVED "$actual_commit"
+	info "pinned kernel commit: ${actual_commit}"
+else
+	export_env KERNEL_SOURCE_COMMIT_RESOLVED "$(git -C "$KERNEL_DIR" rev-parse HEAD)"
+	warn "KERNEL_SOURCE_COMMIT is not pinned; the source branch may move"
+fi
+
 # KernelSU forks compute their version from the commit count, and several
 # read it straight out of the enclosing git repo. A depth-1 clone reports 1
 # commit, which produces a nonsense version. Unshallow just enough to count.

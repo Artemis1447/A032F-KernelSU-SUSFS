@@ -49,6 +49,7 @@ make_anykernel3() {
 	rm -rf "${AK3}/.git" "${AK3}/.github" "${AK3}/README.md"
 
 	ok "AnyKernel3 package assembled"
+	export_env MAKE_ANYKERNEL3_IS_OK true
 	endgroup
 }
 
@@ -100,9 +101,23 @@ write_summary() {
 
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 	case "${1:-all}" in
-		anykernel3) make_anykernel3 ;;
+		anykernel3)
+			if is_true "${BUILD_ANYKERNEL3:-true}"; then
+				make_anykernel3
+			else
+				info "AnyKernel3 packaging disabled by profile"
+			fi
+			;;
 		bootimg)    make_boot_image ;;
-		all)        make_anykernel3; make_boot_image; write_summary ;;
+		all)
+			if is_true "${BUILD_ANYKERNEL3:-true}"; then
+				make_anykernel3
+			else
+				info "AnyKernel3 packaging disabled by profile"
+			fi
+			make_boot_image
+			write_summary
+			;;
 		*) die "unknown package step '$1'" ;;
 	esac
 fi

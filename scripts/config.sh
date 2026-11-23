@@ -24,6 +24,7 @@ CONFIG_FILE=${CONFIG_ENV:-config.env}
 declare -A DEFAULTS=(
 	[KERNEL_SOURCE]=""
 	[KERNEL_SOURCE_BRANCH]=""
+	[KERNEL_SOURCE_COMMIT]=""
 	[KERNEL_CONFIG]=""
 	[KERNEL_IMAGE_NAME]="Image.gz-dtb"
 	[ARCH]="arm64"
@@ -79,6 +80,7 @@ declare -A DEFAULTS=(
 	[NEED_DTBO]="false"
 	[BUILD_BOOT_IMG]="false"
 	[SOURCE_BOOT_IMAGE]=""
+	[BUILD_ANYKERNEL3]="true"
 
 	# Runner
 	[ENABLE_CCACHE]="true"
@@ -185,6 +187,10 @@ validate() {
 
 	[ -n "${CFG[KERNEL_SOURCE]}" ]        || _err "KERNEL_SOURCE is required"
 	[ -n "${CFG[KERNEL_SOURCE_BRANCH]}" ] || _err "KERNEL_SOURCE_BRANCH is required"
+	if [ -n "${CFG[KERNEL_SOURCE_COMMIT]}" ] &&
+	   ! [[ "${CFG[KERNEL_SOURCE_COMMIT]}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+		_err "KERNEL_SOURCE_COMMIT must be a full 40-character commit SHA"
+	fi
 	[ -n "${CFG[KERNEL_CONFIG]}" ]        || _err "KERNEL_CONFIG is required"
 	[ -n "${CFG[KERNEL_IMAGE_NAME]}" ]    || _err "KERNEL_IMAGE_NAME is required"
 

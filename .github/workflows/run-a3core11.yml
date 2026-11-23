@@ -1,0 +1,11 @@
+name: Run a3core v13 ABI baseline
+on:
+  push:
+    paths:
+      - 'trigger11/**'
+  workflow_dispatch:
+jobs:
+  build:
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      config: config/a3core-a032f-v13.env
