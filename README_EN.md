@@ -1,4 +1,4 @@
-[中文](README.md) | **English**
+[Polski](README.md) | **English**
 
 # KernelSU Action
 
