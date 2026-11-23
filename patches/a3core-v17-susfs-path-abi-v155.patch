@@ -115,7 +115,7 @@ index 2d95768..e38cd60 100644
  	struct st_susfs_sus_path_hlist *entry;
  
 diff --git a/include/linux/susfs.h b/include/linux/susfs.h
-index ef31283..26f96a3 100644
+index ef31283..3650ccb 100644
 --- a/include/linux/susfs.h
 +++ b/include/linux/susfs.h
 @@ -6,6 +6,8 @@
@@ -135,7 +135,7 @@ index ef31283..26f96a3 100644
  int susfs_sus_ino_for_filldir64(unsigned long ino);
  #endif
  /* sus_mount */
-@@ -183,4 +186,51 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
+@@ -183,4 +186,62 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
  /* susfs_init */
  void susfs_init(void);
  
@@ -145,20 +145,31 @@ index ef31283..26f96a3 100644
 + * Newer SUSFS exposes per-process markers (TIF_PROC_*) and a deferred work
 + * item that do not exist in v1.5.5. The KSU side guards those call sites on
 + * the SUSFS_V155_LACKS_* markers below so the gap is explicit instead of a
-+ * stub. v1.5.5 tracks the "hidden from this task" condition in
-+ * task_struct->susfs_task_state -- the field every v1.5.5 hiding check reads
-+ * -- so susfs_set_current_proc_umounted() sets that bit.
++ * stub. The "hidden from this task" condition is carried by a thread flag
++ * (TIF_PROC_UMOUNTED) instead of a task_struct field, so the kernel keeps the
++ * stock module ABI.
 + */
 +#define SUSFS_V155_LACKS_NO_SU 1
 +#define SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT 1
 +#define SUSFS_V155_LACKS_EXTRA_WORKS 1
 +#define SUSFS_V155_LACKS_SUS_TYPE 1
 +
++/*
++ * V17 keeps SUSFS' per-task marker out of task_struct. The extra field would
++ * change the struct layout and therefore every MODVERSIONS CRC that reaches
++ * it, breaking the stock vendor modules. A thread flag carries the same
++ * per-task state with no layout change -- the same approach newer SUSFS uses.
++ */
++#define TIF_PROC_UMOUNTED 33
++
++static inline bool susfs_is_current_proc_umounted(void)
++{
++	return test_thread_flag(TIF_PROC_UMOUNTED);
++}
++
 +static inline void susfs_set_current_proc_umounted(void)
 +{
-+	task_lock(current);
-+	current->susfs_task_state |= TASK_STRUCT_NON_ROOT_USER_APP_PROC;
-+	task_unlock(current);
++	set_thread_flag(TIF_PROC_UMOUNTED);
 +}
 +
 +/* Exact ports of the newer string helpers; adb_root.c uses both. */

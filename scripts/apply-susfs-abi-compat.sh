@@ -63,6 +63,48 @@ git -C "$KERNEL_DIR" apply --check --whitespace=error-all "$kernel_patch" \
 git -C "$KERNEL_DIR" apply "$kernel_patch" \
 	|| die "failed to apply the kernel-side SUSFS ABI patch"
 
+group "Porting the SUSFS per-task marker off task_struct"
+# The stock vendor modules are keyed to the stock kernel's MODVERSIONS CRCs.
+# SUSFS v1.5.5 adds susfs_task_state/susfs_last_fake_mnt_id to task_struct and
+# susfs_mnt_id_backup to struct vfsmount; those change the layout of very
+# widely used types and therefore 129/267 CRCs, so the vendor module stops
+# loading. Nothing else reads those fields, so port the per-task marker to a
+# thread flag and keep the two mount-only fields behind SUS_MOUNT (disabled).
+marker='current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC'
+marker_files=()
+while IFS= read -r f; do
+	marker_files+=("$f")
+done < <(grep -rlF --include='*.c' --include='*.h' -- "$marker" "$KERNEL_DIR" || true)
+[ "${#marker_files[@]}" -gt 0 ] \
+	|| die "the SUSFS per-task marker pattern was not found; refusing to continue"
+for f in "${marker_files[@]}"; do
+	sed -i 's/current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC/susfs_is_current_proc_umounted()/g' "$f"
+done
+if grep -rqF --include='*.c' --include='*.h' 'susfs_task_state' "$KERNEL_DIR"; then
+	die "leftover susfs_task_state references after the port"
+fi
+python3 - "$KERNEL_DIR" <<'PY' || die "failed to rewrite the SUSFS struct fields"
+import io, os, sys
+kdir = sys.argv[1]
+def rewrite(rel, old, new):
+    path = os.path.join(kdir, rel)
+    text = io.open(path, encoding='utf-8', errors='surrogateescape').read()
+    if old not in text:
+        sys.exit("marker block not found in %s" % rel)
+    io.open(path, 'w', encoding='utf-8', errors='surrogateescape').write(text.replace(old, new, 1))
+rewrite('include/linux/sched.h',
+        '#ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_task_state;\n\tu64 susfs_last_fake_mnt_id;\n#endif',
+        '#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n\tu64 susfs_last_fake_mnt_id;\n#endif')
+rewrite('include/linux/mount.h',
+        '#ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_mnt_id_backup;\n#endif',
+        '#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n\tu64 susfs_mnt_id_backup;\n#endif')
+PY
+if grep -qF 'u64 susfs_task_state;' "${KERNEL_DIR}/include/linux/sched.h"; then
+	die "task_struct still carries susfs_task_state after the rewrite"
+fi
+info "ported ${#marker_files[@]} files off task_struct; mount-only fields guarded"
+endgroup
+
 ksu_patch="${REPO_ROOT}/patches/a3core-v17-sukisu-susfs-v155-compat.patch"
 [ -s "$ksu_patch" ] || die "SukiSU-side SUSFS ABI patch is missing: ${ksu_patch}"
 git -C "$ksu_dir" apply --check "$ksu_patch" \
@@ -93,6 +135,10 @@ grep -q '^#include "susfs_compat_4_14.h"$' "${ksu_dir}/kernel/supercall/dispatch
 # stubbed as if they worked.
 grep -q 'susfs_set_current_proc_umounted' "$susfs_h" \
 	|| die "the v1.5.5 process marker shim is missing from include/linux/susfs.h"
+grep -q 'susfs_is_current_proc_umounted' "$susfs_h" \
+	|| die "the v1.5.5 thread-flag marker helper is missing from include/linux/susfs.h"
+grep -q 'TIF_PROC_UMOUNTED' "$susfs_h" \
+	|| die "TIF_PROC_UMOUNTED is missing from include/linux/susfs.h"
 for marker in SUSFS_V155_LACKS_NO_SU SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT \
 	SUSFS_V155_LACKS_EXTRA_WORKS; do
 	grep -q "$marker" "$susfs_h" \
