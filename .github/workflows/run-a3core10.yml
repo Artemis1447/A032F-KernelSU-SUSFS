@@ -1,0 +1,13 @@
+name: Run a3core v12
+on:
+  push:
+    paths:
+      - 'trigger10/**'
+  workflow_dispatch:
+jobs:
+  build:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-kernel.yml
+    with:
+      config: config/a3core-a032f-v12.env
