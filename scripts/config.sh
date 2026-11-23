@@ -64,6 +64,9 @@ declare -A DEFAULTS=(
 	[ENABLE_PATH_UMOUNT]="false"
 	[ENABLE_HIDE_STUFF]="false"
 	[ENABLE_KPM]="false"
+	[SUKISU_STATIC_CALL_COMPAT]="false"
+	[CHECK_PVRSRVKM_ABI]="false"
+	[PVRSRVKM_ABI_MANIFEST]=""
 
 	# Kconfig tweaks
 	[ADD_KPROBES_CONFIG]="false"
@@ -228,6 +231,19 @@ validate() {
 
 	if is_true "${CFG[USE_CUSTOM_ANYKERNEL3]}" && [ -z "${CFG[CUSTOM_ANYKERNEL3_SOURCE]}" ]; then
 		_err "USE_CUSTOM_ANYKERNEL3=true requires CUSTOM_ANYKERNEL3_SOURCE"
+	fi
+
+	if is_true "${CFG[SUKISU_STATIC_CALL_COMPAT]}"; then
+		[ "${CFG[KSU_VARIANT]}" = "sukisu-ultra" ] ||
+			_err "SUKISU_STATIC_CALL_COMPAT requires KSU_VARIANT=sukisu-ultra"
+		printf '%s' "${CFG[KSU_REF]}" | grep -qE '^[0-9a-f]{40}$' ||
+			_err "SUKISU_STATIC_CALL_COMPAT requires KSU_REF pinned to a full commit SHA"
+	fi
+
+	if is_true "${CFG[CHECK_PVRSRVKM_ABI]}"; then
+		[ -n "${CFG[PVRSRVKM_ABI_MANIFEST]}" ] &&
+			[ -s "${CFG[PVRSRVKM_ABI_MANIFEST]}" ] ||
+			_err "CHECK_PVRSRVKM_ABI requires a readable PVRSRVKM_ABI_MANIFEST"
 	fi
 
 	[ "$errors" -eq 0 ] || die "${errors} configuration error(s); fix ${CONFIG_FILE} or the workflow inputs"

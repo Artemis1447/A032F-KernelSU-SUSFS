@@ -175,6 +175,10 @@ jobs:
         if: env.KSU_VARIANT != 'none'
         run: bash scripts/kernelsu.sh
 
+      - name: Apply SukiSU 4.14 static_call compatibility
+        if: env.SUKISU_STATIC_CALL_COMPAT == 'true'
+        run: bash scripts/apply-sukisu-static-call-compat.sh
+
       - name: Apply kernel patches
         run: bash scripts/patches.sh all
 
@@ -187,6 +191,22 @@ jobs:
 
       - name: Build kernel
         run: bash scripts/build.sh all
+
+      - name: Verify pvrsrvkm vendor ABI
+        if: env.CHECK_PVRSRVKM_ABI == 'true'
+        run: |
+          mkdir -p "$WORKSPACE/abi-diagnostics"
+          grep -q '^CONFIG_MODULES=y$' "$WORKSPACE/android-kernel/out/.config" \
+            || { echo "CONFIG_MODULES is not enabled" >&2; exit 1; }
+          grep -q '^CONFIG_MODVERSIONS=y$' "$WORKSPACE/android-kernel/out/.config" \
+            || { echo "CONFIG_MODVERSIONS is not enabled" >&2; exit 1; }
+          cp "$WORKSPACE/android-kernel/out/Module.symvers" "$WORKSPACE/abi-diagnostics/Module.symvers"
+          cp "$WORKSPACE/android-kernel/out/.config" "$WORKSPACE/abi-diagnostics/kernel.config"
+          cp "$PVRSRVKM_ABI_MANIFEST" "$WORKSPACE/abi-diagnostics/pvrsrvkm-expected-crcs.json"
+          python3 scripts/verify-pvrsrvkm-abi.py \
+            --expected "$PVRSRVKM_ABI_MANIFEST" \
+            --symvers "$WORKSPACE/android-kernel/out/Module.symvers" \
+            --report "$WORKSPACE/abi-diagnostics/pvrsrvkm-crc-comparison.tsv"
 
       - name: Package artifacts
         run: bash scripts/package.sh all
@@ -209,6 +229,14 @@ jobs:
           name: ${{ env.KERNEL_IMAGE_NAME }}${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
           path: kernel_workspace/android-kernel/out/arch/${{ env.ARCH }}/boot/${{ env.KERNEL_IMAGE_NAME }}
           if-no-files-found: error
+
+      - name: Upload pvrsrvkm ABI diagnostics
+        if: always() && env.CHECK_PVRSRVKM_ABI == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pvrsrvkm-ABI-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+          path: kernel_workspace/abi-diagnostics/*
+          if-no-files-found: warn
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
