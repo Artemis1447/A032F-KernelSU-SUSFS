@@ -80,9 +80,6 @@ done < <(grep -rlF --include='*.c' --include='*.h' -- "$marker" "$KERNEL_DIR" ||
 for f in "${marker_files[@]}"; do
 	sed -i 's/current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC/susfs_is_current_proc_umounted()/g' "$f"
 done
-if grep -rqF --include='*.c' --include='*.h' 'susfs_task_state' "$KERNEL_DIR"; then
-	die "leftover susfs_task_state references after the port"
-fi
 python3 - "$KERNEL_DIR" <<'PY' || die "failed to rewrite the SUSFS struct fields"
 import io, os, sys
 kdir = sys.argv[1]
@@ -101,6 +98,9 @@ rewrite('include/linux/mount.h',
 PY
 if grep -qF 'u64 susfs_task_state;' "${KERNEL_DIR}/include/linux/sched.h"; then
 	die "task_struct still carries susfs_task_state after the rewrite"
+fi
+if grep -rqF --include='*.c' --include='*.h' 'current->susfs_task_state' "$KERNEL_DIR"; then
+	die "leftover susfs_task_state reads after the port"
 fi
 info "ported ${#marker_files[@]} files off task_struct; mount-only fields guarded"
 endgroup
