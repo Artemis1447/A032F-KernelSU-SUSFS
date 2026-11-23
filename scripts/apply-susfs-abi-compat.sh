@@ -163,10 +163,14 @@ grep -q 'susfs_is_current_proc_umounted' "$susfs_h" \
 grep -q 'TIF_PROC_UMOUNTED' "$susfs_h" \
 	|| die "TIF_PROC_UMOUNTED is missing from include/linux/susfs.h"
 for marker in SUSFS_V155_LACKS_NO_SU SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT \
-	SUSFS_V155_LACKS_EXTRA_WORKS; do
+	SUSFS_V155_LACKS_EXTRA_WORKS SUSFS_V155_A3CORE_USER_PTR_HOOKS; do
 	grep -q "$marker" "$susfs_h" \
 		|| die "the V17 unsupported-feature marker ${marker} is missing"
 done
+grep -q 'SUSFS_V155_A3CORE_USER_PTR_HOOKS' "${ksu_dir}/kernel/feature/sucompat.c" \
+	|| die "the SukiSU stat/faccessat hooks do not match the a3core vendor signature"
+grep -q 'SUSFS_V155_A3CORE_USER_PTR_HOOKS' "${ksu_dir}/kernel/feature/sucompat.h" \
+	|| die "the SukiSU stat/faccessat declarations do not match the a3core vendor signature"
 grep -q 'SUSFS_V155_LACKS_NO_SU' "${ksu_dir}/kernel/hook/lsm_hook.c" \
 	|| die "the SukiSU lsm hook is not guarded on the V17 markers"
 grep -q 'kvmalloc_array' "${ksu_dir}/kernel/supercall/susfs_compat_4_14.h" \

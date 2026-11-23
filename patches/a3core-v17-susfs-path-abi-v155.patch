@@ -115,7 +115,7 @@ index 2d95768..e38cd60 100644
  	struct st_susfs_sus_path_hlist *entry;
  
 diff --git a/include/linux/susfs.h b/include/linux/susfs.h
-index ef31283..3650ccb 100644
+index ef31283..1820c43 100644
 --- a/include/linux/susfs.h
 +++ b/include/linux/susfs.h
 @@ -6,6 +6,8 @@
@@ -135,7 +135,7 @@ index ef31283..3650ccb 100644
  int susfs_sus_ino_for_filldir64(unsigned long ino);
  #endif
  /* sus_mount */
-@@ -183,4 +186,62 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
+@@ -183,4 +186,70 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
  /* susfs_init */
  void susfs_init(void);
  
@@ -153,6 +153,14 @@ index ef31283..3650ccb 100644
 +#define SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT 1
 +#define SUSFS_V155_LACKS_EXTRA_WORKS 1
 +#define SUSFS_V155_LACKS_SUS_TYPE 1
++
++/*
++ * The a3core vendor tree calls ksu_handle_stat()/ksu_handle_faccessat() with
++ * `const char __user **`, while SukiSU's CONFIG_KSU_SUSFS branch declares them
++ * with `struct filename **`. Without this marker the early initramfs unpack
++ * dereferences a user pointer as struct filename and panics at boot.
++ */
++#define SUSFS_V155_A3CORE_USER_PTR_HOOKS 1
 +
 +/*
 + * V17 keeps SUSFS' per-task marker out of task_struct. The extra field would

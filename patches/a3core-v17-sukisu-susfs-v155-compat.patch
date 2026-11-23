@@ -1,5 +1,5 @@
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index f458e56..e913aaf 100644
+index f458e56..f80610c 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -74,7 +74,9 @@ int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *arg
@@ -12,7 +12,86 @@ index f458e56..e913aaf 100644
          // - marking proc umounted here is useless because only zygote spawned processes will umount
          //   the sus mounts, tho other susfs features still rely on proc_umounted check, but
          //   it is fine to not spoof for init spawned processes.
-@@ -367,12 +369,18 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
+@@ -179,6 +181,7 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+                         flags);
+ }
+ 
++#ifndef SUSFS_V155_A3CORE_USER_PTR_HOOKS
+ int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode,
+              int *__unused_flags)
+ {
+@@ -216,6 +219,70 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
+     memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
+     return 0;
+ }
++#else
++/*
++ * a3core's fs/stat.c and fs/open.c call these hooks with `const char __user **`
++ * regardless of CONFIG_KSU_SUSFS. The upstream SUSFS branch above expects
++ * `struct filename **` and panics during populate_rootfs() when it reads
++ * (*filename)->name from a user pointer. Keep the upstream sucompat behaviour
++ * (redirect su -> sh) with the signature the vendor hooks actually use.
++ */
++static __always_inline bool a3core_is_su_allowed(const void **ptr_to_check)
++{
++    if (!ksu_su_compat_enabled)
++        return false;
++
++    if (likely(test_thread_flag(TIF_SECCOMP)))
++        return false;
++
++    if (!ksu_is_allow_uid_for_current(current_uid().val))
++        return false;
++
++    if (unlikely(!ptr_to_check))
++        return false;
++
++    if (unlikely(!*ptr_to_check))
++        return false;
++
++    return true;
++}
++
++static noinline int a3core_sucompat_user_common(const char __user **filename_user,
++                    const char *syscall_name)
++{
++    char path[sizeof(su_path)] = { 0 };
++    long len = ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
++
++    if (unlikely(len <= 0))
++        return -EFAULT;
++
++    if (likely(memcmp(path, su_path, sizeof(su_path))))
++        return 0;
++
++    pr_info("%s su->sh!\n", syscall_name);
++    *filename_user = sh_user_path();
++    return 0;
++}
++
++int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++             int *__unused_flags)
++{
++    if (!a3core_is_su_allowed((const void **)filename_user))
++        return 0;
++
++    a3core_sucompat_user_common(filename_user, "faccessat");
++    return 0;
++}
++
++int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
++{
++    if (!a3core_is_su_allowed((const void **)filename_user))
++        return 0;
++
++    a3core_sucompat_user_common(filename_user, "newfstatat");
++    return 0;
++}
++#endif
+ 
+ #else
+ __attribute__((hot)) static __always_inline bool __is_su_allowed(const void **ptr_to_check)
+@@ -367,12 +434,18 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
      return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
  }
  
@@ -33,6 +112,24 @@ index f458e56..e913aaf 100644
  
  // sucompat: permitted process can execute 'su' to gain root access.
  void __init ksu_sucompat_init(void)
+diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
+index 4bc7437..31e4a3b 100644
+--- a/kernel/feature/sucompat.h
++++ b/kernel/feature/sucompat.h
+@@ -6,8 +6,13 @@
+ extern bool ksu_su_compat_enabled;
+ 
+ #ifdef CONFIG_KSU_SUSFS
++#ifdef SUSFS_V155_A3CORE_USER_PTR_HOOKS
++int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
++int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#else
+ int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
+ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
++#endif
+ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                  void *argv_user, void *envp_user,
+                  int *flags);
 diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
 index cf05225..4f7cf64 100644
 --- a/kernel/hook/lsm_hook.c
