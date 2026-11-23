@@ -1,0 +1,235 @@
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -120,4 +120,6 @@
+             on_boot_completed();
+ #ifdef CONFIG_KSU_SUSFS
++#ifdef SUSFS_HAS_SD_CARD_MONITOR
+             susfs_start_sdcard_monitor_fn();
++#endif
+ #endif
+@@ -393,6 +393,7 @@
+ }
+ 
+ #ifdef CONFIG_KSU_SUSFS
++#include "susfs_compat_4_14.h"
+ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
+ {
+     if (magic1 != KSU_INSTALL_MAGIC1) {
+@@ -400,6 +401,9 @@
+         return -EINVAL; 
+     }
+ 
++    if (unlikely(!arg || !*arg))
++        return -EINVAL;
++
+     // If magic2 is susfs and current process is root
+     if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
+         switch(cmd) {
+@@ -407,8 +411,6 @@
+ #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+         case CMD_SUSFS_ADD_SUS_PATH:
+-            susfs_add_sus_path(arg);
+-            return 0;
++            return susfs_add_sus_path_sukisu((void __user *)*arg);
+         case CMD_SUSFS_ADD_SUS_PATH_LOOP:
+-            susfs_add_sus_path_loop(arg);
+-            return 0;
++            return susfs_sukisu_unsupported();
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+@@ -427,15 +429,12 @@
+ #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+         case CMD_SUSFS_SET_UNAME:
+-            susfs_set_uname(arg);
+-            return 0;
++            return susfs_sukisu_set_uname((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+ #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+         case CMD_SUSFS_ENABLE_LOG:
+-            susfs_enable_log(arg);
+-            return 0;
++            return susfs_sukisu_enable_log((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+ #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+         case CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG:
+-            susfs_set_cmdline_or_bootconfig(arg);
+-            return 0;
++            return susfs_sukisu_set_cmdline((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+@@ -459,13 +458,9 @@
+         case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING:
+-            susfs_set_avc_log_spoofing(arg);
+-            return 0;
++            return susfs_sukisu_unsupported();
+         case CMD_SUSFS_SHOW_ENABLED_FEATURES:
+-            susfs_get_enabled_features(arg);
+-            return 0;
++            return susfs_sukisu_show_features((void __user *)*arg);
+         case CMD_SUSFS_SHOW_VARIANT:
+-            susfs_show_variant(arg);
+-            return 0;
++            return susfs_sukisu_show_variant((void __user *)*arg);
+         case CMD_SUSFS_SHOW_VERSION:
+-            susfs_show_version(arg);
+-            return 0;
++            return susfs_sukisu_show_version((void __user *)*arg);
+         default:
+             return -EINVAL;
+diff --git a/kernel/supercall/susfs_compat_4_14.h b/kernel/supercall/susfs_compat_4_14.h
+new file mode 100644
+--- /dev/null
++++ b/kernel/supercall/susfs_compat_4_14.h
+@@ -0,0 +1,153 @@
++#ifndef KSU_SUSFS_COMPAT_4_14_H
++#define KSU_SUSFS_COMPAT_4_14_H
++
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/susfs.h>
++#include <linux/uaccess.h>
++
++#ifndef SUSFS_MAGIC
++#define SUSFS_MAGIC 0xFAFAFAFA
++#endif
++
++#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x00055553
++#define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x00060010
++#define SUKISU_SUSFS_VERSION_SIZE 16
++#define SUKISU_SUSFS_FEATURES_SIZE 8192
++#define SUKISU_SUSFS_VARIANT_SIZE 16
++#define SUKISU_SUSFS_CMDLINE_SIZE 8192
++
++struct sukisu_susfs_version_cmd {
++    char version[SUKISU_SUSFS_VERSION_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_features_cmd {
++    char features[SUKISU_SUSFS_FEATURES_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_variant_cmd {
++    char variant[SUKISU_SUSFS_VARIANT_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_log_cmd {
++    u32 enabled;
++    s32 err;
++};
++
++static inline int susfs_sukisu_unsupported(void)
++{
++    return -EOPNOTSUPP;
++}
++
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++static inline int susfs_sukisu_set_uname(void __user *arg)
++{
++    int err;
++
++    err = susfs_set_uname((struct st_susfs_uname __user *)arg);
++    return copy_to_user((char __user *)arg +
++                        2 * (__NEW_UTS_LEN + 1), &err, sizeof(err))
++               ? -EFAULT
++               : 0;
++}
++#endif
++
++#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++static inline int susfs_sukisu_enable_log(void __user *arg)
++{
++    struct sukisu_susfs_log_cmd cmd;
++
++    if (copy_from_user(&cmd, arg, sizeof(cmd)))
++        return -EFAULT;
++    susfs_set_log(cmd.enabled != 0);
++    cmd.err = 0;
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++#endif
++
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++static inline int susfs_sukisu_set_cmdline(void __user *arg)
++{
++    char *probe;
++    int err;
++
++    probe = kmalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
++    if (!probe)
++        return -ENOMEM;
++    if (copy_from_user(probe, arg, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE)) {
++        kfree(probe);
++        return -EFAULT;
++    }
++    if (!memchr(probe, '\0', SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE))
++        err = -ENAMETOOLONG;
++    else
++        err = susfs_set_cmdline_or_bootconfig((char __user *)arg);
++    kfree(probe);
++
++    return copy_to_user((char __user *)arg + SUKISU_SUSFS_CMDLINE_SIZE,
++                        &err, sizeof(err)) ? -EFAULT : 0;
++}
++#endif
++
++static inline int susfs_sukisu_show_version(void __user *arg)
++{
++    struct sukisu_susfs_version_cmd cmd = { 0 };
++
++    strlcpy(cmd.version, SUSFS_VERSION, sizeof(cmd.version));
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++
++static inline int susfs_sukisu_show_variant(void __user *arg)
++{
++    struct sukisu_susfs_variant_cmd cmd = { 0 };
++
++    strlcpy(cmd.variant, SUSFS_VARIANT, sizeof(cmd.variant));
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++
++static inline void susfs_sukisu_append_feature(char *buf, size_t size,
++                                               const char *name)
++{
++    size_t len = strlen(buf);
++
++    if (len < size)
++        scnprintf(buf + len, size - len, "%s%s", len ? "\n" : "", name);
++}
++
++static inline int susfs_sukisu_show_features(void __user *arg)
++{
++    struct sukisu_susfs_features_cmd *cmd;
++    int ret;
++
++    cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
++    if (!cmd)
++        return -ENOMEM;
++#ifdef CONFIG_KSU_SUSFS_SUS_PATH
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "SUS_PATH");
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "SPOOF_UNAME");
++#endif
++#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "ENABLE_LOG");
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features),
++                                "SPOOF_CMDLINE_OR_BOOTCONFIG");
++#endif
++#ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features),
++                                "HIDE_KSU_SUSFS_SYMBOLS");
++#endif
++    cmd->err = 0;
++    ret = copy_to_user(arg, cmd, sizeof(*cmd)) ? -EFAULT : 0;
++    kfree(cmd);
++    return ret;
++}
++
++#endif

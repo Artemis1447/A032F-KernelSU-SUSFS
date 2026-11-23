@@ -182,6 +182,10 @@ jobs:
       - name: Apply kernel patches
         run: bash scripts/patches.sh all
 
+      - name: Apply SUSFS v1.5.5 ABI bridge
+        if: env.SUSFS_V155_ABI_COMPAT == 'true'
+        run: bash scripts/apply-susfs-abi-compat.sh
+
       - name: Set up ccache
         if: env.ENABLE_CCACHE == 'true'
         uses: hendrikmuhs/ccache-action@v1.2
@@ -191,6 +195,46 @@ jobs:
 
       - name: Build kernel
         run: bash scripts/build.sh all
+
+      - name: Verify SUSFS configuration
+        if: env.SUSFS_V155_ABI_COMPAT == 'true'
+        run: |
+          cfg="$WORKSPACE/android-kernel/out/.config"
+          [ -s "$cfg" ] || { echo "kernel .config is missing" >&2; exit 1; }
+          for sym in CONFIG_KSU_SUSFS CONFIG_KSU_SUSFS_SUS_PATH \
+                     CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_SPOOF_UNAME \
+                     CONFIG_KSU_SUSFS_ENABLE_LOG \
+                     CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+                     CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+                     CONFIG_KSU_SUSFS_OPEN_REDIRECT; do
+            grep -qx "${sym}=y" "$cfg" || {
+              echo "${sym} is not enabled; the approved SUSFS subset drifted" >&2
+              exit 1
+            }
+          done
+          # SUS_MOUNT/TRY_UMOUNT/AUTO_ADD_* are 4.14 fdinfo hazards, and
+          # SUS_MAP / PRIORITY_UID_FILTER have no v1.5.5 kernel counterpart.
+          for sym in CONFIG_KSU_SUSFS_SUS_MOUNT CONFIG_KSU_SUSFS_TRY_UMOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
+                     CONFIG_KSU_SUSFS_SUS_OVERLAYFS CONFIG_KSU_SUSFS_SUS_MAP \
+                     CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER; do
+            if grep -qx "${sym}=y" "$cfg"; then
+              echo "${sym} must stay disabled on this kernel" >&2
+              exit 1
+            fi
+          done
+          grep -q '^#define SUSFS_VERSION "v1.5.5"' \
+            "$WORKSPACE/android-kernel/include/linux/susfs.h" || {
+              echo "the built tree does not carry SUSFS v1.5.5" >&2
+              exit 1
+            }
+          grep -q 'susfs_add_sus_path_sukisu' \
+            "$WORKSPACE/android-kernel/fs/susfs.c" || {
+              echo "the SUSFS ABI bridge is not present in the built tree" >&2
+              exit 1
+            }
 
       - name: Verify pvrsrvkm vendor ABI
         if: env.CHECK_PVRSRVKM_ABI == 'true'

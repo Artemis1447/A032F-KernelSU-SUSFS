@@ -65,6 +65,7 @@ declare -A DEFAULTS=(
 	[ENABLE_HIDE_STUFF]="false"
 	[ENABLE_KPM]="false"
 	[SUKISU_STATIC_CALL_COMPAT]="false"
+	[SUSFS_V155_ABI_COMPAT]="false"
 	[CHECK_PVRSRVKM_ABI]="false"
 	[PVRSRVKM_ABI_MANIFEST]=""
 
@@ -238,6 +239,13 @@ validate() {
 			_err "SUKISU_STATIC_CALL_COMPAT requires KSU_VARIANT=sukisu-ultra"
 		printf '%s' "${CFG[KSU_REF]}" | grep -qE '^[0-9a-f]{40}$' ||
 			_err "SUKISU_STATIC_CALL_COMPAT requires KSU_REF pinned to a full commit SHA"
+	fi
+
+	if is_true "${CFG[SUSFS_V155_ABI_COMPAT]}"; then
+		[ "${CFG[KSU_VARIANT]}" = "sukisu-ultra" ] ||
+			_err "SUSFS_V155_ABI_COMPAT requires KSU_VARIANT=sukisu-ultra"
+		is_true "${CFG[ENABLE_SUSFS]}" ||
+			_err "SUSFS_V155_ABI_COMPAT requires ENABLE_SUSFS=true"
 	fi
 
 	if is_true "${CFG[CHECK_PVRSRVKM_ABI]}"; then

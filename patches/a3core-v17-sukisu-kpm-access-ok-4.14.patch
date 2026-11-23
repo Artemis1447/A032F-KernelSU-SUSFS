@@ -1,0 +1,33 @@
+diff --git a/kernel/extension/kpm/kpm.c b/kernel/extension/kpm/kpm.c
+--- a/kernel/extension/kpm/kpm.c
++++ b/kernel/extension/kpm/kpm.c
+@@ -5,6 +5,7 @@
+ #include <linux/string.h>
+ #include <linux/uaccess.h>
+ #include <linux/kernel.h>
++#include <linux/version.h>
+ #ifdef CONFIG_ARM64
+ #include <asm/ptrace.h>
+ #endif
+@@ -13,6 +14,12 @@
+ #include "compact.h"
+ #include "bridge.h"
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
++#define sukisu_kpm_access_ok(addr, size) access_ok(VERIFY_WRITE, addr, size)
++#else
++#define sukisu_kpm_access_ok(addr, size) access_ok(addr, size)
++#endif
++
+ #define KPM_NAME_LEN 32
+ #define KPM_ARGS_LEN 1024
+ #define KPM_PATH_LEN 1024
+@@ -153,7 +160,7 @@ int do_kpm(void __user *arg)
+     int result;
+     /* Called only through the manager_or_root-authorized extension ioctl. */
+     if (copy_from_user(&cmd, arg, sizeof(cmd))) return -EFAULT;
+-    if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))) return -EFAULT;
++    if (!sukisu_kpm_access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))) return -EFAULT;
+     result = handle_kpm(&cmd);
+     return copy_to_user(u64_to_user_ptr(cmd.result_code), &result, sizeof(result)) ? -EFAULT : 0;
+ }

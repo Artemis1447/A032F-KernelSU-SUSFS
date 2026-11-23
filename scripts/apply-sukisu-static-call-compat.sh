@@ -58,6 +58,14 @@ git -C "$ksu_dir" apply --check "$patch_file" \
 	|| die "V17 compatibility patch does not apply cleanly to the pinned SukiSU source"
 git -C "$ksu_dir" apply "$patch_file" \
 	|| die "failed to apply the V17 compatibility patch"
+
+kpm_patch="${REPO_ROOT}/patches/a3core-v17-sukisu-kpm-access-ok-4.14.patch"
+[ -s "$kpm_patch" ] || die "V17 KPM compatibility patch is missing: ${kpm_patch}"
+git -C "$ksu_dir" apply --check "$kpm_patch" \
+	|| die "V17 KPM compatibility patch does not apply cleanly to the pinned SukiSU source"
+git -C "$ksu_dir" apply "$kpm_patch" \
+	|| die "failed to apply the V17 KPM compatibility patch"
+
 git -C "$ksu_dir" diff --check \
 	|| die "V17 compatibility patch introduced whitespace errors"
 
@@ -66,7 +74,13 @@ grep -q '^#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)$' \
 	|| die "expected version guard was not applied"
 grep -q '^#include <linux/static_call.h>$' "${ksu_dir}/kernel/kernel_includes.h" \
 	|| die "static_call include was unexpectedly removed"
+grep -q '^#define sukisu_kpm_access_ok(addr, size) access_ok(VERIFY_WRITE, addr, size)$' \
+	"${ksu_dir}/kernel/extension/kpm/kpm.c" \
+	|| die "Linux 4.14 write-access compatibility was not applied"
+grep -q 'sukisu_kpm_access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))' \
+	"${ksu_dir}/kernel/extension/kpm/kpm.c" \
+	|| die "KPM result_code access check was not converted"
 
 git -C "$ksu_dir" status --short
 git -C "$ksu_dir" diff --stat
-ok "applied only the V17 static_call include guard"
+ok "applied the V17 static_call and Linux 4.14 KPM compatibility patches"
