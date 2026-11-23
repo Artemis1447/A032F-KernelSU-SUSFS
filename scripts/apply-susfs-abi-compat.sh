@@ -70,31 +70,54 @@ group "Porting the SUSFS per-task marker off task_struct"
 # widely used types and therefore 129/267 CRCs, so the vendor module stops
 # loading. Nothing else reads those fields, so port the per-task marker to a
 # thread flag and keep the two mount-only fields behind SUS_MOUNT (disabled).
-marker='current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC'
-marker_files=()
-while IFS= read -r f; do
-	marker_files+=("$f")
-done < <(grep -rlF --include='*.c' --include='*.h' -- "$marker" "$KERNEL_DIR" || true)
-[ "${#marker_files[@]}" -gt 0 ] \
-	|| die "the SUSFS per-task marker pattern was not found; refusing to continue"
-for f in "${marker_files[@]}"; do
-	sed -i 's/current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC/susfs_is_current_proc_umounted()/g' "$f"
-done
-python3 - "$KERNEL_DIR" <<'PY' || die "failed to rewrite the SUSFS struct fields"
+python3 - "$KERNEL_DIR" <<'PY' || die "failed to port the SUSFS per-task marker"
 import io, os, sys
 kdir = sys.argv[1]
+marker = 'current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC'
+repl = 'susfs_is_current_proc_umounted()'
+ported = 0
+for root, _dirs, names in os.walk(kdir):
+    for name in names:
+        if not name.endswith(('.c', '.h')):
+            continue
+        path = os.path.join(root, name)
+        try:
+            text = io.open(path, encoding='utf-8', errors='surrogateescape').read()
+        except OSError:
+            continue
+        if marker not in text:
+            continue
+        text = text.replace(marker, repl)
+        # The helper lives in <linux/susfs.h>. These files used the bare
+        # task_struct field before, so some of them only pull susfs_def.h;
+        # add the include so the declaration is visible.
+        if 'linux/susfs.h' not in text:
+            cut = text.find('#include')
+            if cut < 0:
+                sys.exit('no include block in %s' % path)
+            eol = text.find('\n', cut)
+            text = text[:eol + 1] + '#include <linux/susfs.h>\n' + text[eol + 1:]
+        io.open(path, 'w', encoding='utf-8', errors='surrogateescape').write(text)
+        ported += 1
+if ported == 0:
+    sys.exit('the SUSFS per-task marker pattern was not found')
+
+
 def rewrite(rel, old, new):
     path = os.path.join(kdir, rel)
     text = io.open(path, encoding='utf-8', errors='surrogateescape').read()
     if old not in text:
-        sys.exit("marker block not found in %s" % rel)
+        sys.exit('marker block not found in %s' % rel)
     io.open(path, 'w', encoding='utf-8', errors='surrogateescape').write(text.replace(old, new, 1))
+
+
 rewrite('include/linux/sched.h',
         '#ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_task_state;\n\tu64 susfs_last_fake_mnt_id;\n#endif',
         '#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n\tu64 susfs_last_fake_mnt_id;\n#endif')
 rewrite('include/linux/mount.h',
         '#ifdef CONFIG_KSU_SUSFS\n\tu64 susfs_mnt_id_backup;\n#endif',
         '#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n\tu64 susfs_mnt_id_backup;\n#endif')
+print('ported %d files' % ported)
 PY
 if grep -qF 'u64 susfs_task_state;' "${KERNEL_DIR}/include/linux/sched.h"; then
 	die "task_struct still carries susfs_task_state after the rewrite"
@@ -102,7 +125,7 @@ fi
 if grep -rqF --include='*.c' --include='*.h' 'current->susfs_task_state' "$KERNEL_DIR"; then
 	die "leftover susfs_task_state reads after the port"
 fi
-info "ported ${#marker_files[@]} files off task_struct; mount-only fields guarded"
+info "ported the SUSFS per-task marker off task_struct; mount-only fields guarded"
 endgroup
 
 ksu_patch="${REPO_ROOT}/patches/a3core-v17-sukisu-susfs-v155-compat.patch"
