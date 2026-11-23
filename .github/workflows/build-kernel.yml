@@ -202,11 +202,9 @@ jobs:
           cfg="$WORKSPACE/android-kernel/out/.config"
           [ -s "$cfg" ] || { echo "kernel .config is missing" >&2; exit 1; }
           for sym in CONFIG_KSU_SUSFS CONFIG_KSU_SUSFS_SUS_PATH \
-                     CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_SPOOF_UNAME \
+                     CONFIG_KSU_SUSFS_SPOOF_UNAME \
                      CONFIG_KSU_SUSFS_ENABLE_LOG \
-                     CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-                     CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-                     CONFIG_KSU_SUSFS_OPEN_REDIRECT; do
+                     CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG; do
             grep -qx "${sym}=y" "$cfg" || {
               echo "${sym} is not enabled; the approved SUSFS subset drifted" >&2
               exit 1
@@ -214,12 +212,16 @@ jobs:
           done
           # SUS_MOUNT/TRY_UMOUNT/AUTO_ADD_* are 4.14 fdinfo hazards, and
           # SUS_MAP / PRIORITY_UID_FILTER have no v1.5.5 kernel counterpart.
+          # SUS_KSTAT / OPEN_REDIRECT are outside the approved V17 subset and
+          # HIDE_KSU_SUSFS_SYMBOLS was deliberately left out of it.
           for sym in CONFIG_KSU_SUSFS_SUS_MOUNT CONFIG_KSU_SUSFS_TRY_UMOUNT \
                      CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
                      CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
                      CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
                      CONFIG_KSU_SUSFS_SUS_OVERLAYFS CONFIG_KSU_SUSFS_SUS_MAP \
-                     CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER; do
+                     CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER \
+                     CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+                     CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS; do
             if grep -qx "${sym}=y" "$cfg"; then
               echo "${sym} must stay disabled on this kernel" >&2
               exit 1

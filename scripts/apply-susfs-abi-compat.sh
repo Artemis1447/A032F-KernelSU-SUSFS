@@ -88,6 +88,21 @@ grep -q '^#include "susfs_compat_4_14.h"$' "${ksu_dir}/kernel/supercall/dispatch
 [ -s "${ksu_dir}/kernel/supercall/susfs_compat_4_14.h" ] \
 	|| die "the 4.14 SUSFS compatibility header was not created"
 
+# V17 supports only the approved subset. The process-marking shim must exist
+# and the unsupported newer-SUSFS features must be marked and guarded, not
+# stubbed as if they worked.
+grep -q 'susfs_set_current_proc_umounted' "$susfs_h" \
+	|| die "the v1.5.5 process marker shim is missing from include/linux/susfs.h"
+for marker in SUSFS_V155_LACKS_NO_SU SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT \
+	SUSFS_V155_LACKS_EXTRA_WORKS; do
+	grep -q "$marker" "$susfs_h" \
+		|| die "the V17 unsupported-feature marker ${marker} is missing"
+done
+grep -q 'SUSFS_V155_LACKS_NO_SU' "${ksu_dir}/kernel/hook/lsm_hook.c" \
+	|| die "the SukiSU lsm hook is not guarded on the V17 markers"
+grep -q 'kvmalloc_array' "${ksu_dir}/kernel/supercall/susfs_compat_4_14.h" \
+	|| die "the Linux 4.14 kvcalloc shim is missing"
+
 git -C "$KERNEL_DIR" status --short -- fs/susfs.c include/linux/susfs.h
 git -C "$ksu_dir" status --short -- kernel/supercall
 endgroup

@@ -115,10 +115,19 @@ index 2d95768..e38cd60 100644
  	struct st_susfs_sus_path_hlist *entry;
  
 diff --git a/include/linux/susfs.h b/include/linux/susfs.h
-index ef31283..d478050 100644
+index ef31283..e3e8bd2 100644
 --- a/include/linux/susfs.h
 +++ b/include/linux/susfs.h
-@@ -128,6 +128,7 @@ struct st_sus_su {
+@@ -6,6 +6,8 @@
+ #include <linux/utsname.h>
+ #include <linux/hashtable.h>
+ #include <linux/path.h>
++#include <linux/sched.h>
++#include <linux/string.h>
+ #include <linux/susfs_def.h>
+ 
+ #define SUSFS_VERSION "v1.5.5"
+@@ -128,6 +130,7 @@ struct st_sus_su {
  /* sus_path */
  #ifdef CONFIG_KSU_SUSFS_SUS_PATH
  int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info);
@@ -126,3 +135,54 @@ index ef31283..d478050 100644
  int susfs_sus_ino_for_filldir64(unsigned long ino);
  #endif
  /* sus_mount */
+@@ -183,4 +186,50 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
+ /* susfs_init */
+ void susfs_init(void);
+ 
++/*
++ * ---- V17: SUSFS v1.5.5 / Linux 4.14 compatibility --------------------
++ *
++ * Newer SUSFS exposes per-process markers (TIF_PROC_*) and a deferred work
++ * item that do not exist in v1.5.5. The KSU side guards those call sites on
++ * the SUSFS_V155_LACKS_* markers below so the gap is explicit instead of a
++ * stub. v1.5.5 tracks the "hidden from this task" condition in
++ * task_struct->susfs_task_state -- the field every v1.5.5 hiding check reads
++ * -- so susfs_set_current_proc_umounted() sets that bit.
++ */
++#define SUSFS_V155_LACKS_NO_SU 1
++#define SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT 1
++#define SUSFS_V155_LACKS_EXTRA_WORKS 1
++
++static inline void susfs_set_current_proc_umounted(void)
++{
++	task_lock(current);
++	current->susfs_task_state |= TASK_STRUCT_NON_ROOT_USER_APP_PROC;
++	task_unlock(current);
++}
++
++/* Exact ports of the newer string helpers; adb_root.c uses both. */
++static inline bool susfs_starts_with(const char *str, const char *prefix)
++{
++	while (*prefix) {
++		if (*str++ != *prefix++)
++			return false;
++	}
++	return true;
++}
++
++static inline bool susfs_ends_with(const char *str, const char *suffix)
++{
++	size_t str_len, suffix_len;
++
++	if (!str || !suffix)
++		return false;
++
++	str_len = strlen(str);
++	suffix_len = strlen(suffix);
++	if (suffix_len > str_len)
++		return false;
++
++	return !strcmp(str + str_len - suffix_len, suffix);
++}
++
+ #endif

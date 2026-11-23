@@ -1,14 +1,158 @@
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index f458e56..60081cc 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -74,7 +74,9 @@ int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *arg
+ 
+     if (likely(!strstr(filename->name, "/app_process") && !strstr(filename->name, "/adbd") && !strstr(filename->name, "/stub_zygote"))) {
+         pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\n", current->pid, filename->name);
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         // - marking proc umounted here is useless because only zygote spawned processes will umount
+         //   the sus mounts, tho other susfs features still rely on proc_umounted check, but
+         //   it is fine to not spoof for init spawned processes.
+diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
+index cf05225..4f7cf64 100644
+--- a/kernel/hook/lsm_hook.c
++++ b/kernel/hook/lsm_hook.c
+@@ -20,6 +20,14 @@ static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred, unsign
+ extern u32 susfs_zygote_sid;
+ extern u32 susfs_zygote_next_sid;
+ extern void disable_seccomp(void);
++
++/*
++ * SUSFS v1.5.5 (the only SUSFS available for Linux 4.14) has no deferred
++ * "extra work" item: susfs_extra_works belongs to newer SUSFS, where its only
++ * handler runs the SUS_PATH loop -- a command V17 answers with -EOPNOTSUPP.
++ * Guard it out so the gap is explicit instead of an unresolved symbol.
++ */
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+ extern struct work_struct susfs_extra_works;
+ 
+ static inline void ksu_handle_extra_susfs_work(void)
+@@ -29,11 +37,14 @@ static inline void ksu_handle_extra_susfs_work(void)
+ 
+     schedule_work(&susfs_extra_works);
+ }
++#endif
+ 
+ static int handle_zygote_setresuid(uid_t ruid) {
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid)) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
+         goto do_umount;
+     }
+@@ -52,7 +63,9 @@ static int handle_zygote_setresuid(uid_t ruid) {
+     // - Check if spawned process is normal user app and needs to be umounted
+     // - Now app_profile for webview_zygote is available in KernelSU manager
+     if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid))) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
+         goto do_umount;
+     }
+@@ -64,7 +77,9 @@ static int handle_zygote_setresuid(uid_t ruid) {
+     }
+ 
+     // Process not umounted but also root not allowed
++#ifndef SUSFS_V155_LACKS_NO_SU
+     susfs_set_current_proc_no_su();
++#endif
+     return 0;
+ 
+ do_umount:
+@@ -72,8 +87,10 @@ do_umount:
+         // Handle kernel umount
+         ksu_handle_umount(current_uid().val, ruid);
+ 
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+         // Handle extra susfs work
+         ksu_handle_extra_susfs_work();
++#endif
+     }
+ 
+     return 0;
+@@ -82,9 +99,13 @@ do_umount:
+ static int handle_zygote_next_setresuid(uid_t ruid) {
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid)) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
++#ifndef SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT
+         susfs_set_current_proc_umounted_for_zygote_next();
++#endif
+         goto do_susfs_work;
+     }
+ 
+@@ -102,9 +123,13 @@ static int handle_zygote_next_setresuid(uid_t ruid) {
+     // - Check if spawned process is normal user app and needs to be umounted
+     // - Now app_profile for webview_zygote is available in KernelSU manager
+     if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid))) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
++#ifndef SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT
+         susfs_set_current_proc_umounted_for_zygote_next();
++#endif
+         goto do_susfs_work;
+     }
+ 
+@@ -115,15 +140,19 @@ static int handle_zygote_next_setresuid(uid_t ruid) {
+     }
+ 
+     // Process not umounted but also root not allowed
++#ifndef SUSFS_V155_LACKS_NO_SU
+     susfs_set_current_proc_no_su();
++#endif
+     return 0;
+ 
+ do_susfs_work:
+     {
+         // Do not umount here as we are in init namespace now
+ 
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+         // Handle extra susfs work
+         ksu_handle_extra_susfs_work();
++#endif
+     }
+ 
+     return 0;
+diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
+index 4948cdf..11d2b82 100644
+--- a/kernel/sulog/event.c
++++ b/kernel/sulog/event.c
+@@ -140,7 +140,7 @@ static __u32 ksu_sulog_flatten_argv(struct user_arg_ptr *argv_user, char *dst, _
+             return ksu_sulog_copy_empty_string(dst);
+ 
+         copied =
+-            strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
++            ksu_strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
+         if (copied <= 0)
+             return ksu_sulog_copy_empty_string(dst);
+ 
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+index 8e9f13d..daa4222 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
-@@ -120,4 +120,6 @@
+@@ -92,7 +92,9 @@ static int do_report_event(void __user *arg)
+             pr_info("boot_complete triggered\n");
              on_boot_completed();
  #ifdef CONFIG_KSU_SUSFS
 +#ifdef SUSFS_HAS_SD_CARD_MONITOR
              susfs_start_sdcard_monitor_fn();
 +#endif
  #endif
-@@ -393,6 +393,7 @@
+         }
+         break;
+@@ -416,59 +418,53 @@ static int do_manage_mark(void __user *arg)
  }
  
  #ifdef CONFIG_KSU_SUSFS
@@ -16,7 +160,6 @@ diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
  int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
  {
      if (magic1 != KSU_INSTALL_MAGIC1) {
-@@ -400,6 +401,9 @@
          return -EINVAL; 
      }
  
@@ -26,7 +169,6 @@ diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
      // If magic2 is susfs and current process is root
      if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
          switch(cmd) {
-@@ -407,8 +411,6 @@
  #ifdef CONFIG_KSU_SUSFS_SUS_PATH
          case CMD_SUSFS_ADD_SUS_PATH:
 -            susfs_add_sus_path(arg);
@@ -37,7 +179,28 @@ diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
 -            return 0;
 +            return susfs_sukisu_unsupported();
  #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-@@ -427,15 +429,12 @@
+ #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+          case CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS:
+             susfs_set_hide_sus_mnts_for_non_su_procs(arg);
+             return 0;
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++        /*
++         * V17 approved subset only. SUS_KSTAT and OPEN_REDIRECT are out of
++         * scope, so their commands are answered explicitly with -EOPNOTSUPP
++         * instead of a half-wired handler that would silently do nothing.
++         */
+         case CMD_SUSFS_ADD_SUS_KSTAT:
+-            susfs_add_sus_kstat(arg);
+-            return 0;
+         case CMD_SUSFS_UPDATE_SUS_KSTAT:
+-            susfs_update_sus_kstat(arg);
+-            return 0;
+         case CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY:
+-            susfs_add_sus_kstat(arg);
+-            return 0;
+-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++            return susfs_sukisu_unsupported();
  #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
          case CMD_SUSFS_SET_UNAME:
 -            susfs_set_uname(arg);
@@ -56,7 +219,18 @@ diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
 -            return 0;
 +            return susfs_sukisu_set_cmdline((void __user *)*arg);
  #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-@@ -459,13 +458,9 @@
+-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+         case CMD_SUSFS_ADD_OPEN_REDIRECT:
+-            susfs_add_open_redirect(arg);
+-            return 0;
+-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
++            return susfs_sukisu_unsupported();
+ #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+         case CMD_SUSFS_ADD_SUS_MAP:
+             susfs_add_sus_map(arg);
+@@ -480,17 +476,13 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
+             return 0;
+ #endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
          case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING:
 -            susfs_set_avc_log_spoofing(arg);
 -            return 0;
@@ -75,11 +249,13 @@ diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
 +            return susfs_sukisu_show_version((void __user *)*arg);
          default:
              return -EINVAL;
+         }
 diff --git a/kernel/supercall/susfs_compat_4_14.h b/kernel/supercall/susfs_compat_4_14.h
 new file mode 100644
+index 0000000..0afcf7b
 --- /dev/null
 +++ b/kernel/supercall/susfs_compat_4_14.h
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,164 @@
 +#ifndef KSU_SUSFS_COMPAT_4_14_H
 +#define KSU_SUSFS_COMPAT_4_14_H
 +
@@ -87,11 +263,22 @@ new file mode 100644
 +#include <linux/kernel.h>
 +#include <linux/slab.h>
 +#include <linux/string.h>
++#include <linux/mm.h>
 +#include <linux/susfs.h>
 +#include <linux/uaccess.h>
 +
 +#ifndef SUSFS_MAGIC
 +#define SUSFS_MAGIC 0xFAFAFAFA
++#endif
++
++/*
++ * SUSFS v1.5.5 on Linux 4.14 has no kvcalloc() (added in 4.18). It does have
++ * kvmalloc_array(), which already rejects a size overflow and returns NULL on
++ * failure, so map kvcalloc() onto it with __GFP_ZERO. The result is
++ * kvfree()-compatible, which is what the only caller (do_lookup_symbols) uses.
++ */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
++#define kvcalloc(n, size, flags) kvmalloc_array((n), (size), (flags) | __GFP_ZERO)
 +#endif
 +
 +#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x00055553
