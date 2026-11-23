@@ -1,0 +1,51 @@
+name: Publish a3core SUSFS build
+
+on:
+  push:
+    paths:
+      - 'publish-trigger/**'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download artifacts from build 45131827540
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 45131827540
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+          merge-multiple: false
+
+      - name: Package flashable zip
+        run: |
+          mkdir -p release
+          shopt -s nullglob
+          for dir in artifacts/AnyKernel3*/; do
+            name=$(basename "${dir%/}")
+            (cd "$dir" && zip -qr9 "${GITHUB_WORKSPACE}/release/${name}.zip" .)
+          done
+          for f in artifacts/*/Image*; do
+            [ -f "$f" ] && cp "$f" release/
+          done
+          ls -lh release/
+
+      - name: Create release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          tag_name: a3core-ksu-susfs-v12-20261123
+          name: a3core - KernelSU v0.9.5 - SUSFS v1.5.5 - 2026-11-23
+          body: |
+            SM-A032F (a3core), kernel 4.14.199, KernelSU v0.9.5, SUSFS v1.5.5 (non-GKI).
+
+            Pobierz plik AnyKernel3*.zip i wgraj przez TWRP lub:
+            adb sideload <plik>.zip
+
+            Plik Image* to sam obraz jadra do wlasnego boot.img.
+
+            Zrodlo: https://github.com/Artemis1447/KernelSU_Action/actions/runs/45131827540
+          files: release/*
