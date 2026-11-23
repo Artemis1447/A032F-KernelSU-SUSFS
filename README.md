@@ -6,7 +6,7 @@ Dokumentacja oryginalnego actiona (angielska): [README_EN.md](README_EN.md)
 
 ## Gotowy build do pobrania
 
-**[Release v12 — KernelSU v0.9.5 + SUSFS v1.5.5](https://github.com/Artemis1447/KernelSU_Action/releases/tag/a3core-ksu-susfs-v12-20261123)**
+**[Release v12 — KernelSU v0.9.5 + SUSFS v1.5.5](https://github.com/Artemis1447/A032F-KernelSU-SUSFS/releases/tag/a3core-ksu-susfs-v12-20261123)**
 
 - `AnyKernel3-KernelSU_v0.9.5-a3core-ksu-susfs-202611231532.zip` — plik do wgrania przez TWRP lub `adb sideload`
 - `Image` — sam obraz jądra (jeśli składasz własny boot.img)
