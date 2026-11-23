@@ -179,6 +179,10 @@ jobs:
         if: env.SUKISU_STATIC_CALL_COMPAT == 'true'
         run: bash scripts/apply-sukisu-static-call-compat.sh
 
+      - name: Apply SUSFS setresuid LSM bridge for Linux 4.14
+        if: env.KSU_SUSFS_SETRESUID_BRIDGE == 'true'
+        run: bash scripts/apply-sukisu-setresuid-bridge.sh
+
       - name: Apply kernel patches
         run: bash scripts/patches.sh all
 
