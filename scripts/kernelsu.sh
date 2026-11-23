@@ -131,14 +131,13 @@ ksu_install() {
 	local ksu_dir="${KERNEL_DIR}/${dir}"
 	[ -d "$ksu_dir" ] || die "${name} setup.sh finished but ${dir}/ is missing"
 
-	# SukiSU's installer shallow-clones its default 'main' branch before
-	# checking out the requested ref. A pinned commit on 'builtin' is not in
-	# that shallow clone, so setup.sh silently keeps main. Fetch the legacy
-	# branch (the non-GKI/SUSFS line) before resolving a full-SHA pin.
+	# SukiSU's installer shallow-clones a mirrored default branch before
+	# checking out the requested ref. Fetch the legacy (non-GKI/SUSFS) branch
+	# from the canonical repository in the registry to resolve a full-SHA pin.
 	if [ "$variant" = "sukisu-ultra" ] \
 		&& printf '%s' "$ref" | grep -qE '^[0-9a-f]{40}$'; then
 		info "fetching SukiSU '${legacy_ref}' to resolve pinned commit ${ref}"
-		git -C "$ksu_dir" fetch --no-tags origin "$legacy_ref" \
+		git -C "$ksu_dir" fetch --no-tags "$repo" "$legacy_ref" \
 			|| die "failed to fetch SukiSU ref '${legacy_ref}' for pinned commit ${ref}"
 		git -C "$ksu_dir" cat-file -e "${ref}^{commit}" 2>/dev/null \
 			|| die "pinned SukiSU commit ${ref} is not reachable from '${legacy_ref}'"
