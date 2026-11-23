@@ -53,8 +53,13 @@ group "Applying V17 SUSFS ABI bridge"
 
 kernel_patch="${REPO_ROOT}/patches/a3core-v17-susfs-path-abi-v155.patch"
 [ -s "$kernel_patch" ] || die "kernel-side SUSFS ABI patch is missing: ${kernel_patch}"
-git -C "$KERNEL_DIR" apply --check "$kernel_patch" \
-	|| die "kernel-side SUSFS ABI patch does not apply cleanly"
+# --whitespace=error-all checks the lines this patch adds, which is what we
+# actually care about. A plain `git diff --check` on the whole kernel tree is
+# useless here: patches.sh has already dropped susfs4ksu in, and that patch
+# legitimately carries lines with trailing tabs, which would drown out any
+# signal from our own hunks.
+git -C "$KERNEL_DIR" apply --check --whitespace=error-all "$kernel_patch" \
+	|| die "kernel-side SUSFS ABI patch does not apply cleanly or adds whitespace errors"
 git -C "$KERNEL_DIR" apply "$kernel_patch" \
 	|| die "failed to apply the kernel-side SUSFS ABI patch"
 
@@ -65,8 +70,8 @@ git -C "$ksu_dir" apply --check "$ksu_patch" \
 git -C "$ksu_dir" apply "$ksu_patch" \
 	|| die "failed to apply the SukiSU-side SUSFS ABI patch"
 
-git -C "$KERNEL_DIR" diff --check \
-	|| die "kernel-side SUSFS ABI patch introduced whitespace errors"
+# The SukiSU checkout only carries our own patches, so a whole-tree check is
+# meaningful there. The kernel tree is not -- see the note above.
 git -C "$ksu_dir" diff --check \
 	|| die "SukiSU-side SUSFS ABI patch introduced whitespace errors"
 
