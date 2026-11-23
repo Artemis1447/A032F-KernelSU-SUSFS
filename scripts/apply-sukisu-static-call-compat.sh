@@ -30,8 +30,8 @@ kver=$(kernel_version "$KERNEL_DIR") || die "cannot read kernel version"
 [ ! -e "${KERNEL_DIR}/include/linux/static_call.h" ] \
 	|| die "static_call.h exists in this kernel tree; refusing the legacy-kernel patch"
 
-if ksu_static_call_uses=$(grep -R -n --include='*.c' --include='*.h' 'static_call' "${ksu_dir}/kernel" \
-	| grep -v '/kernel_includes.h:'); then
+if grep -R -n --include='*.c' --include='*.h' 'static_call' "${ksu_dir}/kernel" \
+	| grep -v '/kernel_includes.h:'; then
 	die "SukiSU has static_call references outside kernel_includes.h; do not suppress the API include"
 else
 	search_status=$?
@@ -39,9 +39,9 @@ else
 		|| die "failed to inspect SukiSU kernel sources for static_call usage (grep exit ${search_status})"
 fi
 
-if static_call_config=$(grep -R -nE '^[[:space:]]*(config[[:space:]]+(HAVE_)?STATIC_CALL|#define[[:space:]]+CONFIG_HAVE_STATIC_CALL)' \
+if grep -R -nE '^[[:space:]]*(config[[:space:]]+(HAVE_)?STATIC_CALL|#define[[:space:]]+CONFIG_HAVE_STATIC_CALL)' \
 	--include='Kconfig*' --include='*.h' \
-	"${KERNEL_DIR}/arch" "${KERNEL_DIR}/include" "${KERNEL_DIR}/kernel"); then
+	"${KERNEL_DIR}/arch" "${KERNEL_DIR}/include" "${KERNEL_DIR}/kernel"; then
 	die "static_call configuration/API declarations found in the Linux 4.14 tree"
 else
 	search_status=$?
