@@ -183,6 +183,10 @@ jobs:
         if: env.KSU_SUSFS_SETRESUID_BRIDGE == 'true'
         run: bash scripts/apply-sukisu-setresuid-bridge.sh
 
+      - name: Apply SUSFS reboot hook for Linux 4.14
+        if: env.KSU_SUSFS_REBOOT_HOOK == 'true'
+        run: bash scripts/apply-sukisu-reboot-hook.sh
+
       - name: Apply kernel patches
         run: bash scripts/patches.sh all
 
