@@ -1,0 +1,208 @@
+diff --git a/fs/susfs.c b/fs/susfs.c
+index 2d95768..e38cd60 100644
+--- a/fs/susfs.c
++++ b/fs/susfs.c
+@@ -4,6 +4,7 @@
+ #include <linux/slab.h>
+ #include <linux/seq_file.h>
+ #include <linux/printk.h>
++#include <linux/string.h>
+ #include <linux/namei.h>
+ #include <linux/list.h>
+ #include <linux/init_task.h>
+@@ -35,7 +36,8 @@ bool susfs_is_log_enabled __read_mostly = true;
+ /* sus_path */
+ #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+ static DEFINE_HASHTABLE(SUS_PATH_HLIST, 10);
+-static int susfs_update_sus_path_inode(char *target_pathname) {
++static int susfs_update_sus_path_inode(char *target_pathname,
++				       unsigned long *target_ino) {
+ 	struct path p;
+ 	struct inode *inode = NULL;
+ 	const char *dev_type;
+@@ -69,6 +71,7 @@ static int susfs_update_sus_path_inode(char *target_pathname) {
+ 		return 1;
+ 	}
+ 
++	*target_ino = inode->i_ino;
+ 	if (!(inode->i_state & INODE_STATE_SUS_PATH)) {
+ 		spin_lock(&inode->i_lock);
+ 		inode->i_state |= INODE_STATE_SUS_PATH;
+@@ -78,21 +81,15 @@ static int susfs_update_sus_path_inode(char *target_pathname) {
+ 	return 0;
+ }
+ 
+-int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
+-	struct st_susfs_sus_path info;
++static int susfs_add_sus_path_info(struct st_susfs_sus_path *info) {
+ 	struct st_susfs_sus_path_hlist *new_entry, *tmp_entry;
+ 	struct hlist_node *tmp_node;
+ 	int bkt;
+ 	bool update_hlist = false;
+ 
+-	if (copy_from_user(&info, user_info, sizeof(info))) {
+-		SUSFS_LOGE("failed copying from userspace\n");
+-		return 1;
+-	}
+-
+ 	spin_lock(&susfs_spin_lock);
+ 	hash_for_each_safe(SUS_PATH_HLIST, bkt, tmp_node, tmp_entry, node) {
+-	if (!strcmp(tmp_entry->target_pathname, info.target_pathname)) {
++	if (!strcmp(tmp_entry->target_pathname, info->target_pathname)) {
+ 			hash_del(&tmp_entry->node);
+ 			kfree(tmp_entry);
+ 			update_hlist = true;
+@@ -107,14 +104,14 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
+ 		return 1;
+ 	}
+ 
+-	new_entry->target_ino = info.target_ino;
+-	strncpy(new_entry->target_pathname, info.target_pathname, SUSFS_MAX_LEN_PATHNAME-1);
+-	if (susfs_update_sus_path_inode(new_entry->target_pathname)) {
++	new_entry->target_ino = info->target_ino;
++	strncpy(new_entry->target_pathname, info->target_pathname, SUSFS_MAX_LEN_PATHNAME-1);
++	if (susfs_update_sus_path_inode(new_entry->target_pathname, &new_entry->target_ino)) {
+ 		kfree(new_entry);
+ 		return 1;
+ 	}
+ 	spin_lock(&susfs_spin_lock);
+-	hash_add(SUS_PATH_HLIST, &new_entry->node, info.target_ino);
++	hash_add(SUS_PATH_HLIST, &new_entry->node, new_entry->target_ino);
+ 	if (update_hlist) {
+ 		SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s' is successfully updated to SUS_PATH_HLIST\n",
+ 				new_entry->target_ino, new_entry->target_pathname);	
+@@ -126,6 +123,42 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
+ 	return 0;
+ }
+ 
++int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
++	struct st_susfs_sus_path info;
++
++	if (copy_from_user(&info, user_info, sizeof(info))) {
++		SUSFS_LOGE("failed copying from userspace\n");
++		return 1;
++	}
++
++	return susfs_add_sus_path_info(&info);
++}
++
++int susfs_add_sus_path_sukisu(void __user *user_info) {
++	struct {
++		char target_pathname[SUSFS_MAX_LEN_PATHNAME];
++		int err;
++	} cmd;
++	struct st_susfs_sus_path info = { 0 };
++
++	if (copy_from_user(&cmd, user_info, sizeof(cmd)))
++		return -EFAULT;
++
++	if (!memchr(cmd.target_pathname, '\0', sizeof(cmd.target_pathname))) {
++		cmd.err = -ENAMETOOLONG;
++	} else {
++		memcpy(info.target_pathname, cmd.target_pathname,
++		       sizeof(info.target_pathname));
++		cmd.err = susfs_add_sus_path_info(&info);
++	}
++
++	if (copy_to_user((char __user *)user_info + sizeof(cmd.target_pathname),
++			 &cmd.err, sizeof(cmd.err)))
++		return -EFAULT;
++
++	return 0;
++}
++
+ int susfs_sus_ino_for_filldir64(unsigned long ino) {
+ 	struct st_susfs_sus_path_hlist *entry;
+ 
+diff --git a/include/linux/susfs.h b/include/linux/susfs.h
+index ef31283..1820c43 100644
+--- a/include/linux/susfs.h
++++ b/include/linux/susfs.h
+@@ -6,6 +6,8 @@
+ #include <linux/utsname.h>
+ #include <linux/hashtable.h>
+ #include <linux/path.h>
++#include <linux/sched.h>
++#include <linux/string.h>
+ #include <linux/susfs_def.h>
+ 
+ #define SUSFS_VERSION "v1.5.5"
+@@ -128,6 +130,7 @@ struct st_sus_su {
+ /* sus_path */
+ #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info);
++int susfs_add_sus_path_sukisu(void __user *user_info);
+ int susfs_sus_ino_for_filldir64(unsigned long ino);
+ #endif
+ /* sus_mount */
+@@ -183,4 +186,70 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
+ /* susfs_init */
+ void susfs_init(void);
+ 
++/*
++ * ---- V17: SUSFS v1.5.5 / Linux 4.14 compatibility --------------------
++ *
++ * Newer SUSFS exposes per-process markers (TIF_PROC_*) and a deferred work
++ * item that do not exist in v1.5.5. The KSU side guards those call sites on
++ * the SUSFS_V155_LACKS_* markers below so the gap is explicit instead of a
++ * stub. The "hidden from this task" condition is carried by a thread flag
++ * (TIF_PROC_UMOUNTED) instead of a task_struct field, so the kernel keeps the
++ * stock module ABI.
++ */
++#define SUSFS_V155_LACKS_NO_SU 1
++#define SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT 1
++#define SUSFS_V155_LACKS_EXTRA_WORKS 1
++#define SUSFS_V155_LACKS_SUS_TYPE 1
++
++/*
++ * The a3core vendor tree calls ksu_handle_stat()/ksu_handle_faccessat() with
++ * `const char __user **`, while SukiSU's CONFIG_KSU_SUSFS branch declares them
++ * with `struct filename **`. Without this marker the early initramfs unpack
++ * dereferences a user pointer as struct filename and panics at boot.
++ */
++#define SUSFS_V155_A3CORE_USER_PTR_HOOKS 1
++
++/*
++ * V17 keeps SUSFS' per-task marker out of task_struct. The extra field would
++ * change the struct layout and therefore every MODVERSIONS CRC that reaches
++ * it, breaking the stock vendor modules. A thread flag carries the same
++ * per-task state with no layout change -- the same approach newer SUSFS uses.
++ */
++#define TIF_PROC_UMOUNTED 33
++
++static inline bool susfs_is_current_proc_umounted(void)
++{
++	return test_thread_flag(TIF_PROC_UMOUNTED);
++}
++
++static inline void susfs_set_current_proc_umounted(void)
++{
++	set_thread_flag(TIF_PROC_UMOUNTED);
++}
++
++/* Exact ports of the newer string helpers; adb_root.c uses both. */
++static inline bool susfs_starts_with(const char *str, const char *prefix)
++{
++	while (*prefix) {
++		if (*str++ != *prefix++)
++			return false;
++	}
++	return true;
++}
++
++static inline bool susfs_ends_with(const char *str, const char *suffix)
++{
++	size_t str_len, suffix_len;
++
++	if (!str || !suffix)
++		return false;
++
++	str_len = strlen(str);
++	suffix_len = strlen(suffix);
++	if (suffix_len > str_len)
++		return false;
++
++	return !strcmp(str + str_len - suffix_len, suffix);
++}
++
+ #endif

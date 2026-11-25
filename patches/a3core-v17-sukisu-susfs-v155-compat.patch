@@ -1,0 +1,590 @@
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index f458e56..f80610c 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -74,7 +74,9 @@ int ksu_handle_execveat_init(struct filename *filename, struct user_arg_ptr *arg
+ 
+     if (likely(!strstr(filename->name, "/app_process") && !strstr(filename->name, "/adbd") && !strstr(filename->name, "/stub_zygote"))) {
+         pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\n", current->pid, filename->name);
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         // - marking proc umounted here is useless because only zygote spawned processes will umount
+         //   the sus mounts, tho other susfs features still rely on proc_umounted check, but
+         //   it is fine to not spoof for init spawned processes.
+@@ -179,6 +181,7 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+                         flags);
+ }
+ 
++#ifndef SUSFS_V155_A3CORE_USER_PTR_HOOKS
+ int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode,
+              int *__unused_flags)
+ {
+@@ -216,6 +219,70 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
+     memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
+     return 0;
+ }
++#else
++/*
++ * a3core's fs/stat.c and fs/open.c call these hooks with `const char __user **`
++ * regardless of CONFIG_KSU_SUSFS. The upstream SUSFS branch above expects
++ * `struct filename **` and panics during populate_rootfs() when it reads
++ * (*filename)->name from a user pointer. Keep the upstream sucompat behaviour
++ * (redirect su -> sh) with the signature the vendor hooks actually use.
++ */
++static __always_inline bool a3core_is_su_allowed(const void **ptr_to_check)
++{
++    if (!ksu_su_compat_enabled)
++        return false;
++
++    if (likely(test_thread_flag(TIF_SECCOMP)))
++        return false;
++
++    if (!ksu_is_allow_uid_for_current(current_uid().val))
++        return false;
++
++    if (unlikely(!ptr_to_check))
++        return false;
++
++    if (unlikely(!*ptr_to_check))
++        return false;
++
++    return true;
++}
++
++static noinline int a3core_sucompat_user_common(const char __user **filename_user,
++                    const char *syscall_name)
++{
++    char path[sizeof(su_path)] = { 0 };
++    long len = ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
++
++    if (unlikely(len <= 0))
++        return -EFAULT;
++
++    if (likely(memcmp(path, su_path, sizeof(su_path))))
++        return 0;
++
++    pr_info("%s su->sh!\n", syscall_name);
++    *filename_user = sh_user_path();
++    return 0;
++}
++
++int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++             int *__unused_flags)
++{
++    if (!a3core_is_su_allowed((const void **)filename_user))
++        return 0;
++
++    a3core_sucompat_user_common(filename_user, "faccessat");
++    return 0;
++}
++
++int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
++{
++    if (!a3core_is_su_allowed((const void **)filename_user))
++        return 0;
++
++    a3core_sucompat_user_common(filename_user, "newfstatat");
++    return 0;
++}
++#endif
+ 
+ #else
+ __attribute__((hot)) static __always_inline bool __is_su_allowed(const void **ptr_to_check)
+@@ -367,12 +434,18 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
+     return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
+ }
+ 
+-// dead code
++#endif
++
++/*
++ * The a3core vendor tree hooks devpts_get_priv() under CONFIG_KSU and calls
++ * ksu_handle_devpts(); keep this (dead) stub defined whenever the KSU tree is
++ * built -- not only with CONFIG_KSU_FEATURE_ADBROOT -- or vmlinux fails to
++ * link with an undefined symbol.
++ */
+ int __maybe_unused ksu_handle_devpts(struct inode *inode)
+ {
+     return 0;
+ }
+-#endif
+ 
+ // sucompat: permitted process can execute 'su' to gain root access.
+ void __init ksu_sucompat_init(void)
+diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
+index 4bc7437..31e4a3b 100644
+--- a/kernel/feature/sucompat.h
++++ b/kernel/feature/sucompat.h
+@@ -6,8 +6,13 @@
+ extern bool ksu_su_compat_enabled;
+ 
+ #ifdef CONFIG_KSU_SUSFS
++#ifdef SUSFS_V155_A3CORE_USER_PTR_HOOKS
++int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
++int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#else
+ int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
+ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
++#endif
+ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                  void *argv_user, void *envp_user,
+                  int *flags);
+diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
+index cf05225..4f7cf64 100644
+--- a/kernel/hook/lsm_hook.c
++++ b/kernel/hook/lsm_hook.c
+@@ -20,6 +20,14 @@ static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred, unsign
+ extern u32 susfs_zygote_sid;
+ extern u32 susfs_zygote_next_sid;
+ extern void disable_seccomp(void);
++
++/*
++ * SUSFS v1.5.5 (the only SUSFS available for Linux 4.14) has no deferred
++ * "extra work" item: susfs_extra_works belongs to newer SUSFS, where its only
++ * handler runs the SUS_PATH loop -- a command V17 answers with -EOPNOTSUPP.
++ * Guard it out so the gap is explicit instead of an unresolved symbol.
++ */
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+ extern struct work_struct susfs_extra_works;
+ 
+ static inline void ksu_handle_extra_susfs_work(void)
+@@ -29,11 +37,14 @@ static inline void ksu_handle_extra_susfs_work(void)
+ 
+     schedule_work(&susfs_extra_works);
+ }
++#endif
+ 
+ static int handle_zygote_setresuid(uid_t ruid) {
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid)) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
+         goto do_umount;
+     }
+@@ -52,7 +63,9 @@ static int handle_zygote_setresuid(uid_t ruid) {
+     // - Check if spawned process is normal user app and needs to be umounted
+     // - Now app_profile for webview_zygote is available in KernelSU manager
+     if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid))) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
+         goto do_umount;
+     }
+@@ -64,7 +77,9 @@ static int handle_zygote_setresuid(uid_t ruid) {
+     }
+ 
+     // Process not umounted but also root not allowed
++#ifndef SUSFS_V155_LACKS_NO_SU
+     susfs_set_current_proc_no_su();
++#endif
+     return 0;
+ 
+ do_umount:
+@@ -72,8 +87,10 @@ do_umount:
+         // Handle kernel umount
+         ksu_handle_umount(current_uid().val, ruid);
+ 
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+         // Handle extra susfs work
+         ksu_handle_extra_susfs_work();
++#endif
+     }
+ 
+     return 0;
+@@ -82,9 +99,13 @@ do_umount:
+ static int handle_zygote_next_setresuid(uid_t ruid) {
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid)) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
++#ifndef SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT
+         susfs_set_current_proc_umounted_for_zygote_next();
++#endif
+         goto do_susfs_work;
+     }
+ 
+@@ -102,9 +123,13 @@ static int handle_zygote_next_setresuid(uid_t ruid) {
+     // - Check if spawned process is normal user app and needs to be umounted
+     // - Now app_profile for webview_zygote is available in KernelSU manager
+     if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid))) {
++#ifndef SUSFS_V155_LACKS_NO_SU
+         susfs_set_current_proc_no_su();
++#endif
+         susfs_set_current_proc_umounted();
++#ifndef SUSFS_V155_LACKS_UMOUNTED_FOR_ZYGOTE_NEXT
+         susfs_set_current_proc_umounted_for_zygote_next();
++#endif
+         goto do_susfs_work;
+     }
+ 
+@@ -115,15 +140,19 @@ static int handle_zygote_next_setresuid(uid_t ruid) {
+     }
+ 
+     // Process not umounted but also root not allowed
++#ifndef SUSFS_V155_LACKS_NO_SU
+     susfs_set_current_proc_no_su();
++#endif
+     return 0;
+ 
+ do_susfs_work:
+     {
+         // Do not umount here as we are in init namespace now
+ 
++#ifndef SUSFS_V155_LACKS_EXTRA_WORKS
+         // Handle extra susfs work
+         ksu_handle_extra_susfs_work();
++#endif
+     }
+ 
+     return 0;
+diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
+index 6f73a74..28ec338 100644
+--- a/kernel/selinux/rules.c
++++ b/kernel/selinux/rules.c
+@@ -151,7 +151,6 @@ static int apply_kernelsu_rules_fn(void *ptr)
+ 
+ void apply_kernelsu_rules(void)
+ {
+-    struct selinux_policy *pol, *old_pol;
+     struct policydb *db;
+ 
+     if (!getenforce()) {
+@@ -159,6 +158,8 @@ void apply_kernelsu_rules(void)
+     }
+ 
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
++    struct selinux_policy *pol, *old_pol;
++
+     mutex_lock(&selinux_state.policy_mutex);
+ 
+     old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
+diff --git a/kernel/selinux/sepolicy.c b/kernel/selinux/sepolicy.c
+index 6b4e0ef..841609a 100644
+--- a/kernel/selinux/sepolicy.c
++++ b/kernel/selinux/sepolicy.c
+@@ -330,9 +330,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
+                 return false;
+         }
+ 
+-#ifdef CONFIG_KSU_SUSFS
++/* SUSFS v1.5.5 has no SELinux type-hiding API; out of the V17 subset. */
++#if defined(CONFIG_KSU_SUSFS) && !defined(SUSFS_V155_LACKS_SUS_TYPE)
+         susfs_add_sus_avd_allowed_by_type(src->value, tgt->value, cls->value, node->datum.u.data);
+-#endif // #ifdef CONFIG_KSU_SUSFS
++#endif
+ 
+         if (invert) {
+             if (perm)
+@@ -757,9 +758,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
+         ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
+     }
+ 
+-#ifdef CONFIG_KSU_SUSFS
++#if defined(CONFIG_KSU_SUSFS) && !defined(SUSFS_V155_LACKS_SUS_TYPE)
+     susfs_add_sus_type(type_name, type->value);
+-#endif // #ifdef CONFIG_KSU_SUSFS
++#endif
+     return true;
+ 
+ #elif defined(KSU_TYPE_VAL_TO_STRUCT_ARRAY)
+diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
+index 4948cdf..11d2b82 100644
+--- a/kernel/sulog/event.c
++++ b/kernel/sulog/event.c
+@@ -140,7 +140,7 @@ static __u32 ksu_sulog_flatten_argv(struct user_arg_ptr *argv_user, char *dst, _
+             return ksu_sulog_copy_empty_string(dst);
+ 
+         copied =
+-            strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
++            ksu_strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
+         if (copied <= 0)
+             return ksu_sulog_copy_empty_string(dst);
+ 
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+index 8e9f13d..daa4222 100644
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -92,7 +92,9 @@ static int do_report_event(void __user *arg)
+             pr_info("boot_complete triggered\n");
+             on_boot_completed();
+ #ifdef CONFIG_KSU_SUSFS
++#ifdef SUSFS_HAS_SD_CARD_MONITOR
+             susfs_start_sdcard_monitor_fn();
++#endif
+ #endif
+         }
+         break;
+@@ -416,59 +418,53 @@ static int do_manage_mark(void __user *arg)
+ }
+ 
+ #ifdef CONFIG_KSU_SUSFS
++#include "susfs_compat_4_14.h"
+ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
+ {
+     if (magic1 != KSU_INSTALL_MAGIC1) {
+         return -EINVAL; 
+     }
+ 
++    if (unlikely(!arg || !*arg))
++        return -EINVAL;
++
+     // If magic2 is susfs and current process is root
+     if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
+         switch(cmd) {
+ #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+         case CMD_SUSFS_ADD_SUS_PATH:
+-            susfs_add_sus_path(arg);
+-            return 0;
++            return susfs_add_sus_path_sukisu((void __user *)*arg);
+         case CMD_SUSFS_ADD_SUS_PATH_LOOP:
+-            susfs_add_sus_path_loop(arg);
+-            return 0;
++            return susfs_sukisu_unsupported();
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+ #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+          case CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS:
+             susfs_set_hide_sus_mnts_for_non_su_procs(arg);
+             return 0;
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++        /*
++         * V17 approved subset only. SUS_KSTAT and OPEN_REDIRECT are out of
++         * scope, so their commands are answered explicitly with -EOPNOTSUPP
++         * instead of a half-wired handler that would silently do nothing.
++         */
+         case CMD_SUSFS_ADD_SUS_KSTAT:
+-            susfs_add_sus_kstat(arg);
+-            return 0;
+         case CMD_SUSFS_UPDATE_SUS_KSTAT:
+-            susfs_update_sus_kstat(arg);
+-            return 0;
+         case CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY:
+-            susfs_add_sus_kstat(arg);
+-            return 0;
+-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++            return susfs_sukisu_unsupported();
+ #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+         case CMD_SUSFS_SET_UNAME:
+-            susfs_set_uname(arg);
+-            return 0;
++            return susfs_sukisu_set_uname((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+ #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+         case CMD_SUSFS_ENABLE_LOG:
+-            susfs_enable_log(arg);
+-            return 0;
++            return susfs_sukisu_enable_log((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+ #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+         case CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG:
+-            susfs_set_cmdline_or_bootconfig(arg);
+-            return 0;
++            return susfs_sukisu_set_cmdline((void __user *)*arg);
+ #endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+         case CMD_SUSFS_ADD_OPEN_REDIRECT:
+-            susfs_add_open_redirect(arg);
+-            return 0;
+-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
++            return susfs_sukisu_unsupported();
+ #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+         case CMD_SUSFS_ADD_SUS_MAP:
+             susfs_add_sus_map(arg);
+@@ -480,17 +476,13 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
+             return 0;
+ #endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+         case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING:
+-            susfs_set_avc_log_spoofing(arg);
+-            return 0;
++            return susfs_sukisu_unsupported();
+         case CMD_SUSFS_SHOW_ENABLED_FEATURES:
+-            susfs_get_enabled_features(arg);
+-            return 0;
++            return susfs_sukisu_show_features((void __user *)*arg);
+         case CMD_SUSFS_SHOW_VARIANT:
+-            susfs_show_variant(arg);
+-            return 0;
++            return susfs_sukisu_show_variant((void __user *)*arg);
+         case CMD_SUSFS_SHOW_VERSION:
+-            susfs_show_version(arg);
+-            return 0;
++            return susfs_sukisu_show_version((void __user *)*arg);
+         default:
+             return -EINVAL;
+         }
+diff --git a/kernel/supercall/susfs_compat_4_14.h b/kernel/supercall/susfs_compat_4_14.h
+new file mode 100644
+index 0000000..0afcf7b
+--- /dev/null
++++ b/kernel/supercall/susfs_compat_4_14.h
+@@ -0,0 +1,164 @@
++#ifndef KSU_SUSFS_COMPAT_4_14_H
++#define KSU_SUSFS_COMPAT_4_14_H
++
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/mm.h>
++#include <linux/susfs.h>
++#include <linux/uaccess.h>
++
++#ifndef SUSFS_MAGIC
++#define SUSFS_MAGIC 0xFAFAFAFA
++#endif
++
++/*
++ * SUSFS v1.5.5 on Linux 4.14 has no kvcalloc() (added in 4.18). It does have
++ * kvmalloc_array(), which already rejects a size overflow and returns NULL on
++ * failure, so map kvcalloc() onto it with __GFP_ZERO. The result is
++ * kvfree()-compatible, which is what the only caller (do_lookup_symbols) uses.
++ */
++#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
++#define kvcalloc(n, size, flags) kvmalloc_array((n), (size), (flags) | __GFP_ZERO)
++#endif
++
++#define CMD_SUSFS_ADD_SUS_PATH_LOOP 0x00055553
++#define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING 0x00060010
++#define SUKISU_SUSFS_VERSION_SIZE 16
++#define SUKISU_SUSFS_FEATURES_SIZE 8192
++#define SUKISU_SUSFS_VARIANT_SIZE 16
++#define SUKISU_SUSFS_CMDLINE_SIZE 8192
++
++struct sukisu_susfs_version_cmd {
++    char version[SUKISU_SUSFS_VERSION_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_features_cmd {
++    char features[SUKISU_SUSFS_FEATURES_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_variant_cmd {
++    char variant[SUKISU_SUSFS_VARIANT_SIZE];
++    s32 err;
++};
++
++struct sukisu_susfs_log_cmd {
++    u32 enabled;
++    s32 err;
++};
++
++static inline int susfs_sukisu_unsupported(void)
++{
++    return -EOPNOTSUPP;
++}
++
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++static inline int susfs_sukisu_set_uname(void __user *arg)
++{
++    int err;
++
++    err = susfs_set_uname((struct st_susfs_uname __user *)arg);
++    return copy_to_user((char __user *)arg +
++                        2 * (__NEW_UTS_LEN + 1), &err, sizeof(err))
++               ? -EFAULT
++               : 0;
++}
++#endif
++
++#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++static inline int susfs_sukisu_enable_log(void __user *arg)
++{
++    struct sukisu_susfs_log_cmd cmd;
++
++    if (copy_from_user(&cmd, arg, sizeof(cmd)))
++        return -EFAULT;
++    susfs_set_log(cmd.enabled != 0);
++    cmd.err = 0;
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++#endif
++
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++static inline int susfs_sukisu_set_cmdline(void __user *arg)
++{
++    char *probe;
++    int err;
++
++    probe = kmalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
++    if (!probe)
++        return -ENOMEM;
++    if (copy_from_user(probe, arg, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE)) {
++        kfree(probe);
++        return -EFAULT;
++    }
++    if (!memchr(probe, '\0', SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE))
++        err = -ENAMETOOLONG;
++    else
++        err = susfs_set_cmdline_or_bootconfig((char __user *)arg);
++    kfree(probe);
++
++    return copy_to_user((char __user *)arg + SUKISU_SUSFS_CMDLINE_SIZE,
++                        &err, sizeof(err)) ? -EFAULT : 0;
++}
++#endif
++
++static inline int susfs_sukisu_show_version(void __user *arg)
++{
++    struct sukisu_susfs_version_cmd cmd = { 0 };
++
++    strlcpy(cmd.version, SUSFS_VERSION, sizeof(cmd.version));
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++
++static inline int susfs_sukisu_show_variant(void __user *arg)
++{
++    struct sukisu_susfs_variant_cmd cmd = { 0 };
++
++    strlcpy(cmd.variant, SUSFS_VARIANT, sizeof(cmd.variant));
++    return copy_to_user(arg, &cmd, sizeof(cmd)) ? -EFAULT : 0;
++}
++
++static inline void susfs_sukisu_append_feature(char *buf, size_t size,
++                                               const char *name)
++{
++    size_t len = strlen(buf);
++
++    if (len < size)
++        scnprintf(buf + len, size - len, "%s%s", len ? "\n" : "", name);
++}
++
++static inline int susfs_sukisu_show_features(void __user *arg)
++{
++    struct sukisu_susfs_features_cmd *cmd;
++    int ret;
++
++    cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
++    if (!cmd)
++        return -ENOMEM;
++#ifdef CONFIG_KSU_SUSFS_SUS_PATH
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "SUS_PATH");
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "SPOOF_UNAME");
++#endif
++#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features), "ENABLE_LOG");
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features),
++                                "SPOOF_CMDLINE_OR_BOOTCONFIG");
++#endif
++#ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
++    susfs_sukisu_append_feature(cmd->features, sizeof(cmd->features),
++                                "HIDE_KSU_SUSFS_SYMBOLS");
++#endif
++    cmd->err = 0;
++    ret = copy_to_user(arg, cmd, sizeof(*cmd)) ? -EFAULT : 0;
++    kfree(cmd);
++    return ret;
++}
++
++#endif

@@ -175,8 +175,24 @@ jobs:
         if: env.KSU_VARIANT != 'none'
         run: bash scripts/kernelsu.sh
 
+      - name: Apply SukiSU 4.14 static_call compatibility
+        if: env.SUKISU_STATIC_CALL_COMPAT == 'true'
+        run: bash scripts/apply-sukisu-static-call-compat.sh
+
+      - name: Apply SUSFS setresuid LSM bridge for Linux 4.14
+        if: env.KSU_SUSFS_SETRESUID_BRIDGE == 'true'
+        run: bash scripts/apply-sukisu-setresuid-bridge.sh
+
+      - name: Apply SUSFS reboot hook for Linux 4.14
+        if: env.KSU_SUSFS_REBOOT_HOOK == 'true'
+        run: bash scripts/apply-sukisu-reboot-hook.sh
+
       - name: Apply kernel patches
         run: bash scripts/patches.sh all
+
+      - name: Apply SUSFS v1.5.5 ABI bridge
+        if: env.SUSFS_V155_ABI_COMPAT == 'true'
+        run: bash scripts/apply-susfs-abi-compat.sh
 
       - name: Set up ccache
         if: env.ENABLE_CCACHE == 'true'
@@ -187,6 +203,64 @@ jobs:
 
       - name: Build kernel
         run: bash scripts/build.sh all
+
+      - name: Verify SUSFS configuration
+        if: env.SUSFS_V155_ABI_COMPAT == 'true'
+        run: |
+          cfg="$WORKSPACE/android-kernel/out/.config"
+          [ -s "$cfg" ] || { echo "kernel .config is missing" >&2; exit 1; }
+          for sym in CONFIG_KSU_SUSFS CONFIG_KSU_SUSFS_SUS_PATH \
+                     CONFIG_KSU_SUSFS_SPOOF_UNAME \
+                     CONFIG_KSU_SUSFS_ENABLE_LOG \
+                     CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG; do
+            grep -qx "${sym}=y" "$cfg" || {
+              echo "${sym} is not enabled; the approved SUSFS subset drifted" >&2
+              exit 1
+            }
+          done
+          # SUS_MOUNT/TRY_UMOUNT/AUTO_ADD_* are 4.14 fdinfo hazards, and
+          # SUS_MAP / PRIORITY_UID_FILTER have no v1.5.5 kernel counterpart.
+          # SUS_KSTAT / OPEN_REDIRECT are outside the approved V17 subset and
+          # HIDE_KSU_SUSFS_SYMBOLS was deliberately left out of it.
+          for sym in CONFIG_KSU_SUSFS_SUS_MOUNT CONFIG_KSU_SUSFS_TRY_UMOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
+                     CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
+                     CONFIG_KSU_SUSFS_SUS_OVERLAYFS CONFIG_KSU_SUSFS_SUS_MAP \
+                     CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER \
+                     CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_OPEN_REDIRECT \
+                     CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS; do
+            if grep -qx "${sym}=y" "$cfg"; then
+              echo "${sym} must stay disabled on this kernel" >&2
+              exit 1
+            fi
+          done
+          grep -q '^#define SUSFS_VERSION "v1.5.5"' \
+            "$WORKSPACE/android-kernel/include/linux/susfs.h" || {
+              echo "the built tree does not carry SUSFS v1.5.5" >&2
+              exit 1
+            }
+          grep -q 'susfs_add_sus_path_sukisu' \
+            "$WORKSPACE/android-kernel/fs/susfs.c" || {
+              echo "the SUSFS ABI bridge is not present in the built tree" >&2
+              exit 1
+            }
+
+      - name: Verify pvrsrvkm vendor ABI
+        if: env.CHECK_PVRSRVKM_ABI == 'true'
+        run: |
+          mkdir -p "$WORKSPACE/abi-diagnostics"
+          grep -q '^CONFIG_MODULES=y$' "$WORKSPACE/android-kernel/out/.config" \
+            || { echo "CONFIG_MODULES is not enabled" >&2; exit 1; }
+          grep -q '^CONFIG_MODVERSIONS=y$' "$WORKSPACE/android-kernel/out/.config" \
+            || { echo "CONFIG_MODVERSIONS is not enabled" >&2; exit 1; }
+          cp "$WORKSPACE/android-kernel/out/Module.symvers" "$WORKSPACE/abi-diagnostics/Module.symvers"
+          cp "$WORKSPACE/android-kernel/out/.config" "$WORKSPACE/abi-diagnostics/kernel.config"
+          cp "$PVRSRVKM_ABI_MANIFEST" "$WORKSPACE/abi-diagnostics/pvrsrvkm-expected-crcs.json"
+          python3 scripts/verify-pvrsrvkm-abi.py \
+            --expected "$PVRSRVKM_ABI_MANIFEST" \
+            --symvers "$WORKSPACE/android-kernel/out/Module.symvers" \
+            --report "$WORKSPACE/abi-diagnostics/pvrsrvkm-crc-comparison.tsv"
 
       - name: Package artifacts
         run: bash scripts/package.sh all
@@ -209,6 +283,14 @@ jobs:
           name: ${{ env.KERNEL_IMAGE_NAME }}${{ env.LOCALVERSION }}${{ env.UPLOADNAME }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
           path: kernel_workspace/android-kernel/out/arch/${{ env.ARCH }}/boot/${{ env.KERNEL_IMAGE_NAME }}
           if-no-files-found: error
+
+      - name: Upload pvrsrvkm ABI diagnostics
+        if: always() && env.CHECK_PVRSRVKM_ABI == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pvrsrvkm-ABI-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+          path: kernel_workspace/abi-diagnostics/*
+          if-no-files-found: warn
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4

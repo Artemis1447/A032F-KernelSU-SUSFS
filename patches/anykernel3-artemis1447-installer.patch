@@ -1,0 +1,21 @@
+diff --git a/META-INF/com/google/android/update-binary b/META-INF/com/google/android/update-binary
+index 8c7006e..674fdb2 100644
+--- a/META-INF/com/google/android/update-binary
++++ b/META-INF/com/google/android/update-binary
+@@ -551,7 +551,7 @@ if [ -f version ]; then
+   ui_printfile version;
+   ui_print " ";
+ fi;
+-ui_print " " "AnyKernel3 by osm0sis @ xda-developers" " ";
++ui_print " " "AnyKernel3 by osm0sis @ xda-developers" " " "Modified by Artemis1447" " ";
+ grep -oE 'AK_BASE.*' META-INF/com/google/android/updater-script >&2;
+ ui_print " ";
+ 
+@@ -563,6 +563,7 @@ do_levelcheck;
+ do_vendorlevelcheck;
+ 
+ ui_print "Installing...";
++export PATH="/sbin:/system/bin:$AKHOME/tools:$AKHOME/bin:$PATH";
+ ash anykernel.sh;
+ if [ $? != 0 ]; then
+   abort;

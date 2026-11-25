@@ -131,6 +131,20 @@ ksu_install() {
 	local ksu_dir="${KERNEL_DIR}/${dir}"
 	[ -d "$ksu_dir" ] || die "${name} setup.sh finished but ${dir}/ is missing"
 
+	# SukiSU's installer shallow-clones a mirrored default branch before
+	# checking out the requested ref. Fetch the legacy (non-GKI/SUSFS) branch
+	# from the canonical repository in the registry to resolve a full-SHA pin.
+	if [ "$variant" = "sukisu-ultra" ] \
+		&& printf '%s' "$ref" | grep -qE '^[0-9a-f]{40}$'; then
+		info "fetching SukiSU '${legacy_ref}' to resolve pinned commit ${ref}"
+		git -C "$ksu_dir" fetch --no-tags "$repo" "$legacy_ref" \
+			|| die "failed to fetch SukiSU ref '${legacy_ref}' for pinned commit ${ref}"
+		git -C "$ksu_dir" cat-file -e "${ref}^{commit}" 2>/dev/null \
+			|| die "pinned SukiSU commit ${ref} is not reachable from '${legacy_ref}'"
+		git -C "$ksu_dir" checkout --detach "$ref" \
+			|| die "failed to check out pinned SukiSU commit ${ref}"
+	fi
+
 	local link="${KERNEL_DIR}/drivers/kernelsu"
 	[ -e "$link" ] || die "drivers/kernelsu symlink was not created"
 
@@ -161,8 +175,9 @@ ksu_install() {
 	head_desc=$(git -C "$ksu_dir" describe --tags --always 2>/dev/null || echo "$head_sha")
 	if [ -n "$ref" ]; then
 		local want
-		want=$(git -C "$ksu_dir" rev-parse --verify --quiet "$ref^{commit}" 2>/dev/null || true)
-		if [ -n "$want" ] && [ "$want" != "$(git -C "$ksu_dir" rev-parse HEAD)" ]; then
+		want=$(git -C "$ksu_dir" rev-parse --verify --quiet "$ref^{commit}" 2>/dev/null) \
+			|| die "${name} checkout cannot resolve the requested ref '${ref}'"
+		if [ "$want" != "$(git -C "$ksu_dir" rev-parse HEAD)" ]; then
 			die "${name} is checked out at ${head_desc}, not the requested ref '${ref}'"
 		fi
 	fi
