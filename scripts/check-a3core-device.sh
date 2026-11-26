@@ -12,6 +12,7 @@ id
 getenforce
 /data/adb/ksud extension get susfs
 grep -w pvrsrvkm /proc/modules
+printf 'loaded_modules='; cut -d' ' -f1 /proc/modules | sort | tr '\n' ' '; echo
 cat /sys/class/devfreq/60000000.gpu/device/uevent
 for p in /sys/devices/system/cpu/cpufreq/policy*; do
     echo "$p: $(cat "$p/affected_cpus") $(cat "$p/scaling_governor") $(cat "$p/scaling_available_frequencies")"
@@ -78,3 +79,17 @@ for algorithm in lzo-rle lz4; do
     echo 1 > "$sys/reset"
 done
 echo "active_swap=$(cat /sys/block/zram0/comp_algorithm) $(cat /sys/block/zram0/disksize)"
+
+# Short repeatable GPU/UI load; keep the frame counts for scale as well as %.
+am start -W -a android.settings.SETTINGS >/dev/null
+sleep 2
+dumpsys gfxinfo com.android.settings reset >/dev/null
+for pair in 1 2 3 4 5 6 7 8; do
+    input swipe 360 1250 360 450 400
+    input swipe 360 450 360 1250 400
+done
+dumpsys gfxinfo com.android.settings | grep -E 'Total frames rendered:|Janky frames:|50th percentile:|90th percentile:|95th percentile:|99th percentile:'
+input keyevent KEYCODE_HOME
+for z in /sys/class/thermal/thermal_zone*; do
+    echo "after_scroll $(cat "$z/type") $(cat "$z/temp" 2>/dev/null || echo unavailable)"
+done
