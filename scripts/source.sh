@@ -18,6 +18,7 @@ rm -rf "$KERNEL_DIR"
 retry 3 git clone -q --recursive --depth=1 \
 	-b "$KERNEL_SOURCE_BRANCH" "$KERNEL_SOURCE" "$KERNEL_DIR" \
 	|| die "failed to clone ${KERNEL_SOURCE}"
+checkout_pinned_commit "$KERNEL_DIR" "${KERNEL_SOURCE_COMMIT:-}"
 
 # KernelSU forks compute their version from the commit count, and several
 # read it straight out of the enclosing git repo. A depth-1 clone reports 1

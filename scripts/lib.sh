@@ -155,6 +155,20 @@ ref_exists() {
 	return 1
 }
 
+# A profile may pin a commit behind the tip of a shallow branch checkout.
+checkout_pinned_commit() {
+	local dir=$1 sha=$2
+	[ -n "$sha" ] || return 0
+	[[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid source commit: $sha"
+	if [ "$(git -C "$dir" rev-parse HEAD)" != "$sha" ]; then
+		retry 3 git -C "$dir" fetch --depth=1 origin "$sha"
+		git -C "$dir" checkout -q --detach "$sha"
+		git -C "$dir" submodule update --init --recursive --depth=1
+	fi
+	[ "$(git -C "$dir" rev-parse HEAD)" = "$sha" ] || die "source pin mismatch: $dir"
+	info "source verified at $sha"
+}
+
 # ------------------------------------------------------------- Kconfig I/O ---
 #
 # The original workflow manipulated defconfigs with a pile of one-off `sed`

@@ -1,0 +1,35 @@
+From 2fee8599b23ca1f6f4b5df6e5541e4dc166ae8b8 Mon Sep 17 00:00:00 2001
+From: Taejoon Song <taejoon.song@lge.com>
+Date: Fri, 27 Nov 2026 00:11:02 +0100
+Subject: [PATCH 2/3] zram: try to avoid worst-case scenario on same element
+ pages
+
+Backport upstream 90f82cbfe502e96e602614ebbaf7725470c5208a. Compare the tail word before walking the middle. The full equality check still covers every word; keep compression format, algorithms and writeback unchanged.
+---
+ drivers/block/zram/zram_drv.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 3a78d624707..c2da7c5a7d9 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -235,14 +235,17 @@ static inline void zram_fill_page(void *ptr, unsigned long len,
+ 
+ static bool page_same_filled(void *ptr, unsigned long *element)
+ {
+-	unsigned int pos;
+ 	unsigned long *page;
+ 	unsigned long val;
++	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*page) - 1;
+ 
+ 	page = (unsigned long *)ptr;
+ 	val = page[0];
+ 
+-	for (pos = 1; pos < PAGE_SIZE / sizeof(*page); pos++) {
++	if (val != page[last_pos])
++		return false;
++
++	for (pos = 1; pos < last_pos; pos++) {
+ 		if (val != page[pos])
+ 			return false;
+ 	}

@@ -84,6 +84,14 @@ make_boot_image() {
 	endgroup
 }
 
+archive_v18_source() {
+	is_true "${A3CORE_V18_PERF:-false}" || return 0
+	# Ship the actual integrated source, symlinks and generated defconfig
+	# next to its .config and Module.symvers in the existing ABI artifact.
+	mkdir -p "$WORKSPACE/abi-diagnostics"
+	tar --exclude='.git' --exclude='./out' -czf "$WORKSPACE/abi-diagnostics/v18-source.tar.gz" -C "$KERNEL_DIR" .
+}
+
 write_summary() {
 	summary ""
 	summary "### Build artifacts"
@@ -102,7 +110,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 	case "${1:-all}" in
 		anykernel3) make_anykernel3 ;;
 		bootimg)    make_boot_image ;;
-		all)        make_anykernel3; make_boot_image; write_summary ;;
+		all)        make_anykernel3; make_boot_image; archive_v18_source; write_summary ;;
 		*) die "unknown package step '$1'" ;;
 	esac
 fi

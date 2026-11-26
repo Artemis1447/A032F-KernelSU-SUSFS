@@ -62,6 +62,7 @@ susfs_apply() {
 	rm -rf "$susfs_dir"
 	retry 3 git clone -q --depth=1 -b "$branch" "$repo" "$susfs_dir" \
 		|| die "failed to clone ${repo} @ ${branch}"
+	checkout_pinned_commit "$susfs_dir" "${SUSFS_COMMIT:-}"
 
 	local kp="${susfs_dir}/kernel_patches"
 	[ -d "$kp" ] || die "unexpected susfs4ksu layout: ${kp} missing"
@@ -387,6 +388,10 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 
 			if is_true "${ENABLE_SUSFS:-false}";      then susfs_apply;      fi
 			if is_true "${ENABLE_HIDE_STUFF:-false}"; then hide_stuff_apply; fi
+			if is_true "${A3CORE_V18_PERF:-false}"; then
+				git -C "$KERNEL_DIR" apply --check --whitespace=error "$REPO_ROOT"/patches/v18/*.patch
+				git -C "$KERNEL_DIR" apply --whitespace=error "$REPO_ROOT"/patches/v18/*.patch
+			fi
 			;;
 		*) die "unknown patch step '$1'" ;;
 	esac

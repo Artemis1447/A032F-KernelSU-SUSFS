@@ -1,3 +1,4 @@
 # Patch payloads legitimately contain single-space context lines from the
 # upstream trees. They are diff data, not whitespace errors in this repository.
 patches/*.patch -whitespace
+patches/v18/*.patch -whitespace
