@@ -79,6 +79,8 @@ for algorithm in lzo-rle lz4; do
     echo 1 > "$sys/reset"
 done
 echo "active_swap=$(cat /sys/block/zram0/comp_algorithm) $(cat /sys/block/zram0/disksize)"
+cleanup
+trap - EXIT HUP INT TERM
 
 # Short repeatable GPU/UI load; keep the frame counts for scale as well as %.
 am start -W -a android.settings.SETTINGS >/dev/null
@@ -93,3 +95,27 @@ input keyevent KEYCODE_HOME
 for z in /sys/class/thermal/thermal_zone*; do
     echo "after_scroll $(cat "$z/type") $(cat "$z/temp" 2>/dev/null || echo unavailable)"
 done
+
+# Four ordinary CPU workers, one minute, on a cached, read-only ROM file.
+# Each worker also has its own deadline if the host or adb disconnects.
+zone=/sys/class/thermal/thermal_zone1
+[ "$(cat "$zone/type")" = cpu-thmzone ]
+trip=$(cat "$zone/trip_point_0_temp")
+end=$(( $(date +%s) + 60 ))
+workers=
+for _ in 1 2 3 4; do
+    (while [ "$(date +%s)" -lt "$end" ]; do sha256sum /system/framework/framework.jar >/dev/null; done) &
+    workers="$workers $!"
+done
+while [ "$(date +%s)" -lt "$end" ]; do
+    temp=$(cat "$zone/temp")
+    echo "load_cpu_mC=$temp freq_kHz=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq),$(cat /sys/devices/system/cpu/cpufreq/policy4/scaling_cur_freq)"
+    if [ "$temp" -ge "$trip" ]; then
+        for pid in $workers; do kill "$pid" 2>/dev/null || true; done
+        echo "thermal load stopped at the first configured CPU trip ($trip mC)"
+        exit 1
+    fi
+    sleep 5
+done
+for pid in $workers; do wait "$pid"; done
+echo "bounded thermal load complete; final_cpu_mC=$(cat "$zone/temp")"
