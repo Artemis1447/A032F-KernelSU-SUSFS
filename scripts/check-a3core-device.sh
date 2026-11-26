@@ -29,7 +29,7 @@ done
 # parent eMMC; the payload is discarded. Controller caches are not flushed.
 bb=/data/adb/ksu/bin/busybox
 [ -x "$bb" ]
-for run in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
     start=$(date +%s%N)
     "$bb" dd if=/dev/block/mmcblk0 of=/dev/null bs=1M count=16 iflag=direct status=none
     echo "emmc_16MiB_read_ns=$(( $(date +%s%N) - start ))"
@@ -57,7 +57,7 @@ case "$id_new" in ''|0|*[!0-9]*) exit 1 ;; esac
 index=$id_new
 sys=/sys/block/zram$index
 dev=/dev/block/zram$index
-for retry in 1 2 3; do [ ! -b "$dev" ] || break; sleep 1; done
+for _ in 1 2 3; do [ ! -b "$dev" ] || break; sleep 1; done
 if [ ! -b "$dev" ]; then
     numbers=$(cat "$sys/dev")
     dev=$work/zram-test-device
@@ -67,7 +67,7 @@ fi
 for algorithm in lzo-rle lz4; do
     echo "$algorithm" > "$sys/comp_algorithm"
     echo 8388608 > "$sys/disksize"
-    for run in 1 2 3; do
+    for _ in 1 2 3; do
         start=$(date +%s%N)
         "$bb" dd if="$work/input" of="$dev" bs=4096 count=2048 oflag=direct conv=notrunc status=none
         elapsed=$(( $(date +%s%N) - start ))
@@ -84,7 +84,7 @@ echo "active_swap=$(cat /sys/block/zram0/comp_algorithm) $(cat /sys/block/zram0/
 am start -W -a android.settings.SETTINGS >/dev/null
 sleep 2
 dumpsys gfxinfo com.android.settings reset >/dev/null
-for pair in 1 2 3 4 5 6 7 8; do
+for _ in 1 2 3 4 5 6 7 8; do
     input swipe 360 1250 360 450 400
     input swipe 360 450 360 1250 400
 done
