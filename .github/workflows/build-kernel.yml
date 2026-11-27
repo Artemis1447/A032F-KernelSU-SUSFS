@@ -328,6 +328,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, Node 24
+        with:
+          persist-credentials: false
+
       - name: Download artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, Node 24
         with:
@@ -348,6 +352,9 @@ jobs:
           done
           ls -la release/
 
+      - name: Include the signed SukiSU Nova Manager APK
+        run: python3 scripts/release-manager.py --stage release
+
       - name: Create release
         uses: softprops/action-gh-release@40c2ca6ddd77ba2a30bbea8f67409c0f76868d67 # v3, Node 24
         with:
@@ -362,4 +369,5 @@ jobs:
             | SUSFS | `${{ needs.build.outputs.susfs_version || 'not applied' }}` |
 
             Flash the AnyKernel3 zip from a custom recovery.
+            The attached 32-bit SukiSU Nova Manager APK is for kernels built with SukiSU.
           files: release/*

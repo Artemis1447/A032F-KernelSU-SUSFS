@@ -56,7 +56,9 @@ The headline cold-launch runs used USB power, animation scales set to `0`, and *
 
 The [V19 release](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v19-extreme-20261127) includes the raw `Image`, a device-scoped AnyKernel3 ZIP, integrated kernel source, a build manifest, ABI reports and SHA-256 checksums from [the verified Actions run](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325). `Image` is the raw kernel for repacking a full Boot image. The hardware test used the repacked full Boot image through TWRP. The AnyKernel3 ZIP was verified offline.
 
-Build from **Actions → Build Kernel → Run workflow → `main`**. The default dispatch profile is [`config/a3core-a032f-v19-extreme.env`](config/a3core-a032f-v19-extreme.env). [Installation and rollback instructions](V19.md) explain how to preserve your own complete V17 Boot backup. Use the manager for SukiSU-Ultra; the build is not a KernelSU Next build.
+**Root manager for V17/V19:** [Download SukiSU Nova Manager v3.0.0 (ARM32 APK)](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/download/a3core-v19-extreme-20261127/SukiSU_Nova_v3.0.0_35000-armeabi-v7a-release.apk) from the release assets. Install it as a normal Android app. This is the signed `armeabi-v7a` APK from [SukiSU Nova](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/v3.0.0); the tested ROM runs 32-bit apps. The legacy V12 kernel uses [KernelSU v0.9.5](https://github.com/tiann/KernelSU/releases/tag/v0.9.5) instead.
+
+Build from **Actions → Build Kernel → Run workflow → `main`**. The default dispatch profile is [`config/a3core-a032f-v19-extreme.env`](config/a3core-a032f-v19-extreme.env). [Installation and rollback instructions](V19.md) explain how to preserve your own complete V17 Boot backup.
 
 ## Project history and documentation
 

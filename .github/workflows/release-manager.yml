@@ -1,0 +1,31 @@
+name: Attach SukiSU Nova Manager to releases
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  # Releases made by older workflows with GITHUB_TOKEN do not fire release events.
+  schedule:
+    - cron: '37 5 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-manager-assets
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, Node 24
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Verify or attach the ARM32 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-manager.py --sync "$GITHUB_REPOSITORY"

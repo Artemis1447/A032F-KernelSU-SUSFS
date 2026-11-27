@@ -13,6 +13,10 @@ jobs:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, Node 24
+        with:
+          persist-credentials: false
+
       - name: Download artifacts from build 45131827540
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, Node 24
         with:
@@ -34,6 +38,9 @@ jobs:
           done
           ls -lh release/
 
+      - name: Include the signed SukiSU Nova Manager APK
+        run: python3 scripts/release-manager.py --stage release
+
       - name: Create release
         uses: softprops/action-gh-release@40c2ca6ddd77ba2a30bbea8f67409c0f76868d67 # v3, Node 24
         with:
@@ -46,6 +53,8 @@ jobs:
             adb sideload <plik>.zip
 
             `Image` is the raw kernel for repacking a compatible `boot.img`.
+
+            V12 uses [KernelSU v0.9.5](https://github.com/tiann/KernelSU/releases/tag/v0.9.5). The attached SukiSU Nova Manager APK is for the SukiSU builds (V17/V19); it is not the manager for V12.
 
             Source: https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45131827540
           files: release/*
