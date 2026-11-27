@@ -1,6 +1,6 @@
-[Polski](README.md) | **English**
+[A03 Core project README](README.md) | **General build documentation**
 
-# KernelSU Action
+# KernelSU Action: general build guide
 
 A GitHub Actions workflow that integrates KernelSU (and its forks), SUSFS and the common kernel patches into an Android kernel, and produces a flashable AnyKernel3 package.
 
@@ -22,12 +22,12 @@ If you are not the kernel author, please keep KernelSU builds made from someone 
 ## Quick start
 
 1. Fork this repository.
-2. Edit [`config.env`](config.env) — at minimum `KERNEL_SOURCE`, `KERNEL_SOURCE_BRANCH`, `KERNEL_CONFIG` and `KERNEL_IMAGE_NAME`.
-3. Go to `Actions` → `Build Kernel` → `Run workflow`.
+2. For a different device, edit the [generic `config.env`](config.env) or add a separate device profile. Set at least `KERNEL_SOURCE`, `KERNEL_SOURCE_BRANCH`, `KERNEL_CONFIG` and `KERNEL_IMAGE_NAME`.
+3. Go to `Actions` → `Build Kernel` → `Run workflow` and enter that profile's path in `Config file to build`. The dispatch default in this fork is the SM-A032F V19 profile.
 4. Pick your KernelSU variant, whether to enable SUSFS, and so on, then run it.
 5. Download the AnyKernel3 artifact and flash it from a custom recovery.
 
-The dropdowns all default to `config`, meaning "use whatever the config file says". They **override** the matching key in `config.env` only when you actively change them, so day-to-day tweaking needs no commits — and simply hitting Run always builds exactly what your profile describes, rather than silently switching off a feature you enabled because some checkbox defaulted to off.
+The override dropdowns default to `config`, meaning "use the selected profile's value". Changing a dropdown overrides its corresponding profile setting for that run.
 
 To keep one profile per device, copy `config.env` to `config/<device>.env` and pass that path as `Config file to build`.
 

@@ -1,81 +1,48 @@
-# a3core / SM-A032F — SukiSU-Ultra + SuSFS v1.5.5 (V17)
+# A03 Core V19 EXTREME
 
-Fork repozytorium [KernelSU_Action](https://github.com/xiaoleGun/KernelSU_action) przygotowany dla Samsung SM-A032F (a3core, LineageOS 21 / Android 14).
+**The most thoroughly validated Galaxy A03 Core kernel in this project.** V19 combines targeted latency work with the original vendor GPU ABI, and backs it up with two verified Android boots and 60 measured cold Settings launches on the **Samsung Galaxy A03 Core SM-A032F**.
 
-Dokumentacja oryginalnego actiona (angielska): [README_EN.md](README_EN.md)
+[**Download V19 build artifacts**](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325#artifacts) · [**Benchmarks and validation**](docs/v19-validation.md) · [**Build, install and roll back**](V19.md) · [**V17 recovery baseline**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124)
 
-## Gotowy build do pobrania
+## The headline numbers
 
-**[Release V17 — SukiSU-Ultra 3.0.0 + SuSFS v1.5.5](https://github.com/Artemis1447/A032F-KernelSU-SUSFS/releases/tag/a3core-v17-sukisu-susfs-20261124)**
+| Metric on the reference SM-A032F | V19 EXTREME |
+|---|---:|
+| Settled Settings cold launch at 15 minutes | **993 ms median / 1,024 ms p95** |
+| Fastest measured V19 cold launch | **975 ms** |
+| Settings scroll frame time, p95 | **12 ms** |
+| Janky frames in the measured scroll | **0 / 423** |
+| Stock PowerVR symbol-version checks | **267 / 267 passed** |
 
-- `v17-reboothook-AnyKernel3.zip` — 11 338 464 B, SHA256 `5671583df73b1b706165bb8bd7120efef7e849daacf72ebc8aad8b2c3326ef40`
-- `Image` — sam obraz jądra, jeśli składasz własny boot.img
-- Zweryfikowany CI: run `45299270122` (job `138127409056`), `pvrsrvkm ABI: 267/267 matched; 0 missing; 0 mismatched; 0 ambiguous`
+V19 also brought direct eMMC read and LZO-RLE write medians back within the range observed on V17. Results are from one handset; the 15-minute run has no matched V17/V18 comparator, and the historical 743–800 ms target was not reached. [See the full comparison and tradeoffs.](docs/v19-validation.md)
 
-## Co zawiera jądro
+## Built for this hardware
 
-| Element | Wersja / ustawienie |
-| --- | --- |
-| Jądro | 4.14.199 (IverCoder/android_kernel_samsung_a3core, branch stable), pin `81da2968a777556d20847e30b618658905af67a3` |
-| SukiSU-Ultra | `builtin`, pin `4bec532dd447e2852aa8932afa768255350c103a`, kernel full version `v3.0.0-4bec532d@HEAD` |
-| SuSFS | `susfs4ksu/kernel-4.14`, pin `77905b5a071e6f3669e3b1814cea30147c0801da`, v1.5.5, NON-GKI |
-| Hook | `SUSFS Inline Hook`, Zygisk Next 1.5.3 |
-| Manager | SukiSU-Nova v3.0.0 (35000-6) |
-| ABI | stock MODVERSIONS zachowany; `pvrsrvkm` 267/267; brak nowych pól w `task_struct` / `struct vfsmount` |
+| Component | V19 target |
+|---|---|
+| Device | **SM-A032F (`a3core`)**, Unisoc SC9863A, Cortex-A55 |
+| Tested ROM | LineageOS 21 / Android 14, **32-bit ARM userspace** |
+| Kernel | **Linux 4.14.199**, arm64, Samsung stock-derived |
+| Graphics | Stock PowerVR Rogue `pvrsrvkm`; byte-identical V17 `Module.symvers` |
+| Root and filesystem extension | **SukiSU-Ultra** with **SUSFS v1.5.5, extension ABI 2** |
+| Build | Android Clang **11.0.1 (`r383902`)**; pinned source, strict patch application and artifact checksums |
 
-## Zatwierdzony zakres SuSFS
+### What makes V19 different
 
-Włączone:
+- **Lean graphics allocation:** ION no longer allocates and frees a temporary descriptor for each buffer chunk. It also drops per-buffer diagnostic logging from the allocation path.
+- **Less work on the hot paths:** ZRAM publishes successful writes under its existing slot lock. Schedutil skips a redundant retry wakeup when a saturated frequency vote is already satisfied. LZO-RLE remains the active compressor on the tested ROM.
+- **Cleaner boot:** The alternate Novatek probe's cleanup was fixed. The V18 `devm_kfree` warning was absent from the captured V19 boot, and the selected touchscreen driver registered.
+- **Stock compatibility:** Existing clock limits, thermal protection, and proprietary GPU driver stay in place. On-device checks confirmed SELinux **Enforcing**, working `su`, SUSFS ABI 2, and a live PowerVR driver.
 
-- `CONFIG_KSU_SUSFS_SUS_PATH`
-- `CONFIG_KSU_SUSFS_SPOOF_UNAME`
-- `CONFIG_KSU_SUSFS_ENABLE_LOG`
-- `CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG`
+## Download and build
 
-Wyłączone:
+The verified [V19 Actions run](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325#artifacts) provides the raw `Image`, a device-scoped AnyKernel3 ZIP, integrated kernel source, a build manifest and SHA-256 checksums. Actions artifacts have **14-day retention**; if unavailable, dispatch a new build using the checked-in profile. `Image` is a kernel binary, not a complete Android Boot image. The hardware test used the repacked full Boot image through TWRP; the independently packaged AnyKernel3 ZIP was verified offline and was not used for that test.
 
-- `SUS_MOUNT`, `SUS_KSTAT`, `OPEN_REDIRECT`, `SUS_MAP`, `PRIORITY_UID_FILTER`
-- `HIDE_KSU_SUSFS_SYMBOLS` — `n`
-- brak mapowania `susfs_set_current_proc_no_su`
+Build from **Actions → Build Kernel → Run workflow → `main`**. The default dispatch profile is [`config/a3core-a032f-v19-extreme.env`](config/a3core-a032f-v19-extreme.env). [Installation and rollback instructions](V19.md) explain how to preserve your own complete V17 Boot backup. Use the manager for SukiSU-Ultra; the build is not a KernelSU Next build.
 
-Stan per-task jest przechowywany w `TIF_PROC_UMOUNTED`, bez zmiany layoutu struktur ABI. Funkcje spoza zatwierdzonego zakresu są jawnie wyłączone, nie są pseudo-stubami.
+## Project history and documentation
 
-## Co zmieniła V17
-
-1. **Bridge menedżera fd** — most Linux 4.14 `task_fix_setuid` → `ksu_handle_setresuid()`, dzięki któremu `ksud`/menedżer dostaje fd `anon_inode:[ksu_driver]`.
-2. **ABI fix** — 24 odczyty markerów zastąpione przez `susfs_is_current_proc_umounted()`; pola zależne od mountów za `CONFIG_KSU_SUSFS_SUS_MOUNT`.
-3. **Reboot hook** — minimalny hook w `kernel/reboot.c` przed bramką `CAP_SYS_BOOT`, pod `CONFIG_KSU && CONFIG_KSU_SUSFS`. Bez niego `ksud` nie instalował magic-fd dla SUSFS i karty SuSFS nie miały skąd otrzymać stanu.
-4. **AnyKernel3 zawsze budowany** — usunięto martwy klucz `BUILD_ANYKERNEL3`; konfiguracje muszą być w allowliście `scripts/config.sh DEFAULTS`, inaczej CI cicho pomija krok.
-
-## Jak wgrać
-
-1. Pobierz `v17-reboothook-AnyKernel3.zip` z Release powyżej i zweryfikuj SHA256.
-2. Wejdź w TWRP → Install → wybierz ZIP. Alternatywnie: `adb sideload` (jeśli TWRP go obsługuje).
-3. Po restarcie używaj **SukiSU-Nova v3.0.0**. Nie używaj KernelSU Next — sygnatura nie pasuje (`Nie znaleziono sygnatury KernelSU Next v2 w jadrze!`).
-4. Sprawdzenie: `uname -a` powinien pokazać `4.14.199-a3core-vendorabi-v17-sukisu-susfs` z buildem `Tue Nov 24 00:59:10 UTC 2026`; `adb root` + `id` daje `uid=0(root) ... context=u:r:su:s0`.
-5. `ksud extension get susfs` → `Status: available`, `Extension ABI: 2`; `EXTENSION_LIST_V3` zawiera `susfs` z `api=2`.
-
-### Uwaga dla TWRP
-
-Jeśli instalator AnyKernel3 kończy się błędem `ash: inaccessible or not found` / `magiskboot: inaccessible or not found`, TWRP gubi `PATH`. Po rozpakowaniu zipa przed `ash anykernel.sh;` dodaj:
-
-```sh
-export PATH="$AKHOME/tools:$AKHOME/bin:$PATH"
-```
-
-i uruchom `/sbin/sh /tmp/updater 1 dummy /tmp/<zip> 2>&1`.
-
-## Jak przebudować
-
-1. Edytuj `config/a3core-a032f-v17-sukisu-susfs.env` i `scripts/config.sh`.
-2. Uruchom workflow `.github/workflows/build-kernel.yml` albo wrzuć plik do `trigger13/`.
-3. Artefakty pojawią się w runie; przed flashiem zawsze sprawdź SHA256 na urządzeniu.
-
-## Znane ograniczenie UI
-
-Urządzenie ma 32-bitowy userspace (`armeabi-v7a`, kernel `armv8l`). W tej architekturze `ksud` nie kompiluje komendy `susfs` (`error: unrecognized subcommand 'susfs'`), a `susfs_actually_working()` jest stałym `false`. Dlatego karty **SuSFS**, **KPM** i **CPU identity spoofing** w managerze pozostają `Unsupported`, mimo że kernel ma zarejestrowany extension SUSFS (`caps=0x11`, `api=2`). To ograniczenie userspace, nie defekt jądra. Nie dodajemy fałszywych stubów, żeby tylko zmienić etykietę w UI.
-
-## Uwagi
-
-- Play Integrity **STRONG** nie jest osiągalne na stałe. Realnym celem jest MEETS_DEVICE.
-- Opis oryginalnego upstreamu był po chińsku — ten plik zastępuje go polskim opisem tego forką.
+- **V19 EXTREME:** current source and build profile on `main`; [`v19-extreme`](https://github.com/Artemis1447/A032F-V19-EXTREME/tree/v19-extreme) retains the development history.
+- **V18:** [stock-derived comparison build and results](V18.md).
+- **V17:** [published baseline and known-good rollback reference](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124).
+- **Build system:** [general workflow documentation](README_EN.md), based on [KernelSU Action](https://github.com/xiaoleGun/KernelSU_action). Kernel source: [IverCoder's Samsung A03 Core tree](https://github.com/IverCoder/android_kernel_samsung_a3core).

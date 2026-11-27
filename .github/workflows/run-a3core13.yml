@@ -1,9 +1,6 @@
 name: Run a3core v17 SukiSU SUSFS ABI
 
 on:
-  push:
-    paths:
-      - 'trigger13/**'
   workflow_dispatch:
 
 jobs:

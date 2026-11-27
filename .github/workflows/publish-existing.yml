@@ -14,7 +14,7 @@ jobs:
       actions: read
     steps:
       - name: Download artifacts from build 45131827540
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, Node 24
         with:
           run-id: 45131827540
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -35,17 +35,17 @@ jobs:
           ls -lh release/
 
       - name: Create release
-        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        uses: softprops/action-gh-release@40c2ca6ddd77ba2a30bbea8f67409c0f76868d67 # v3, Node 24
         with:
           tag_name: a3core-ksu-susfs-v12-20261123
           name: a3core - KernelSU v0.9.5 - SUSFS v1.5.5 - 2026-11-23
           body: |
             SM-A032F (a3core), kernel 4.14.199, KernelSU v0.9.5, SUSFS v1.5.5 (non-GKI).
 
-            Pobierz plik AnyKernel3*.zip i wgraj przez TWRP lub:
+            Install the AnyKernel3 ZIP through TWRP or run:
             adb sideload <plik>.zip
 
-            Plik Image* to sam obraz jadra do wlasnego boot.img.
+            `Image` is the raw kernel for repacking a compatible `boot.img`.
 
-            Zrodlo: https://github.com/Artemis1447/A032F-KernelSU-SUSFS/actions/runs/45131827540
+            Source: https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45131827540
           files: release/*

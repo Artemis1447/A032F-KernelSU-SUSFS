@@ -9,7 +9,7 @@ on:
       config:
         description: "Config file to build (path, relative to the repo root)"
         required: false
-        default: "config.env"
+        default: "config/a3core-a032f-v19-extreme.env"
         type: string
       # "config" on the options below means "use whatever the config file says".
       # It is the default so that running the form without touching anything
@@ -107,6 +107,7 @@ jobs:
       ksu_version: ${{ steps.meta.outputs.ksu_version }}
       kernel_release: ${{ steps.meta.outputs.kernel_release }}
       susfs_version: ${{ steps.meta.outputs.susfs_version }}
+      v19_extreme: ${{ steps.meta.outputs.v19_extreme }}
     env:
       WORKSPACE: ${{ github.workspace }}/kernel_workspace
       CONFIG_ENV: ${{ inputs.config }}
@@ -275,6 +276,7 @@ jobs:
             echo "ksu_version=${KSU_VERSION_LABEL:-}"
             echo "kernel_release=${KERNEL_RELEASE:-}"
             echo "susfs_version=${SUSFS_VERSION:-}"
+            echo "v19_extreme=${A3CORE_V19_EXTREME:-false}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload kernel image
@@ -321,7 +323,7 @@ jobs:
   release:
     name: Publish release
     needs: build
-    if: inputs.publish_release && github.ref_name != 'v19-extreme'
+    if: inputs.publish_release && needs.build.outputs.v19_extreme == 'false' && github.ref_name != 'v19-extreme'
     runs-on: ubuntu-latest
     permissions:
       contents: write
