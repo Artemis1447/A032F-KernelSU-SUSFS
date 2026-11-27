@@ -4,7 +4,7 @@ set -eu
 [ "$(id -u)" = 0 ] && [ "$(getprop ro.product.model)" = SM-A032F ]
 [ "$(getprop ro.product.device)" = a3core ] && [ "$(getprop sys.boot_completed)" = 1 ]
 case "$(uname -r)" in
-    4.14.199-a3core-vendorabi-v1[78]-sukisu-susfs) ;;
+    4.14.199-a3core-vendorabi-v1[78]-sukisu-susfs|4.14.199-a3core-v19-extreme-sukisu-susfs) ;;
     *) exit 1 ;;
 esac
 uname -a

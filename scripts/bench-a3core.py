@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adb', default='adb')
     parser.add_argument('--serial', required=True)
-    parser.add_argument('--kernel', choices=('v17', 'v18'), required=True)
+    parser.add_argument('--kernel', choices=('v17', 'v18', 'v19'), required=True)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--at-uptime', type=int, help='target seconds since boot for a paired run (10 s tolerance)')
     args = parser.parse_args()
@@ -66,6 +66,8 @@ printf 'ion.log_lines=%s\\n' "$(dmesg | grep -c 'ion_system_heap_allocate, size:
     identity = shell('getprop ro.product.model; getprop ro.product.device; getprop ro.lineage.version; '
                      'getprop ro.product.cpu.abilist; getprop sys.boot_completed; uname -r').splitlines()
     expected = '4.14.199-a3core-vendorabi-' + args.kernel + '-sukisu-susfs'
+    if args.kernel == 'v19':
+        expected = '4.14.199-a3core-v19-extreme-sukisu-susfs'
     if (len(identity) != 6 or identity[:2] != ['SM-A032F', 'a3core'] or
             not identity[2].startswith('21.0-') or identity[3:] != ['armeabi-v7a,armeabi', '1', expected]):
         raise SystemExit(f'unexpected device or kernel: {identity}')
@@ -108,6 +110,7 @@ su -c 'cat /sys/class/thermal/thermal_zone1/temp'
             raise ValueError('the phone rebooted during the measurement')
         times = [s['total_ms'] for s in result['samples'] if not s['warmup']]
         result['median_ms'] = statistics.median(times)
+        result['p95_nearest_rank_ms'] = sorted(times)[(95 * len(times) + 99) // 100 - 1]
         print(f'{args.kernel}: {times}; median {result["median_ms"]} ms')
     finally:
         args.out.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
