@@ -2,6 +2,19 @@
 
 V19 was tested on one Galaxy A03 Core running LineageOS 21 (Android 14, ARM32 userspace) with the stock PowerVR Rogue driver. The tested build is [Actions run 45915725325](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325), recipe commit `6e8865fb67521923ada8aa3814ae9a47c80d4638`. The documentation and build-dispatch changes on `main` do not alter that image's source patches or profile.
 
+## Test configuration
+
+| Item | Setting |
+|---|---|
+| Handset | Samsung Galaxy A03 Core SM-A032F (`a3core`), Unisoc SC9863A, 2 GB RAM, eMMC storage, stock PowerVR Rogue driver |
+| ROM | `21.0-20250125-UNOFFICIAL-a3core` / Android 14, 32-bit ARM userspace (`armeabi-v7a,armeabi`) |
+| Google apps and services | BiTGApps enabled; Google Play services (`com.google.android.gms`) and Google Play Store (`com.android.vending`) installed on the test device |
+| Enabled SukiSU modules | `BiTGApps`, `bindhosts`, `deepdoze_enforcer`, `magic_mount_rs`, `smsfix_a03core_a14`, `youtube-morphe-sixstrings`, `zygisksu` |
+| Memory and storage | 2.5 GiB ZRAM using `lzo-rle`, `vm.swappiness=140`, `vm.page-cluster=0`; stock eMMC queue using `noop` |
+| Recorded cold-launch conditions | USB power connected; window, transition and animator scales all `0`; `schedutil` on both CPU clusters |
+
+The V17/V18/V19 cold-launch runs recorded the same ROM, enabled module set and settings listed above. The app timed in these tests was Android Settings; Google apps were present as part of the test environment and were not benchmarked separately or bundled with the kernel.
+
 ## Settings launch and rendering
 
 Each launch window contained 12 measured process-cold `am start -W` launches. The four- and seven-minute windows used the same handset and ROM. There were two measured V17 boots, one V18 boot, and two V19 boots. p95 is the nearest-rank percentile; with 12 samples it equals the largest observed time in that window.
@@ -38,7 +51,7 @@ Compared with V18, V19 cut the direct eMMC read median by **2.93 ms (2.6%)** and
 
 Three later V19 userspace traces measured a **518 ms median** from preferences ready to first display. The Settings main thread spent a median **397 ms on-CPU** and about **1–2 ms runnable but off-CPU** during that interval. Matched synchronous Binder calls accounted for **37–43 ms** of elapsed time within the gap, and the longest matched fence wait on any captured thread was **6.47 ms**. Per-layer SurfaceFlinger timing was unavailable, and the individual Settings methods responsible for its CPU time were not identified.
 
-The phone retained its original animation scales (`0.5`) and `vm.swappiness=140`. The ROM's `/system/bin/phh-on-boot.sh` writes 140 after `sys.boot_completed=1`; early test windows that read back 140 after being assigned 100 were excluded as swappiness treatment samples. No persistent userspace tweak is part of V19.
+For the later userspace tuning study, the phone's baseline animation scales were `0.5`, unlike the kernel comparison's `0`. The later study restored `0.5` and `vm.swappiness=140`. The ROM's `/system/bin/phh-on-boot.sh` writes 140 after `sys.boot_completed=1`; early test windows that read back 140 after being assigned 100 were excluded as swappiness treatment samples. No persistent userspace tweak is part of V19.
 
 ## Verify the downloaded files
 

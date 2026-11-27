@@ -24,6 +24,12 @@ V17's repeat scroll test and V18 both already measured **12 ms p95**. The pooled
 
 V19 also brought direct eMMC read and LZO-RLE write medians back within the range observed on V17. Results are from one handset; the 15-minute run has no matched V17/V18 comparator, and the historical 743–800 ms target was not reached. [See the full comparison and tradeoffs.](docs/v19-validation.md)
 
+## Test setup: Google apps installed
+
+The benchmarks ran on the **2 GB SM-A032F** with **LineageOS 21 (`21.0-20250125-UNOFFICIAL-a3core`), Android 14, and 32-bit ARM userspace**. The phone had **BiTGApps enabled, including Google Play services and the Google Play Store**, and the same seven SukiSU modules were enabled across V17, V18 and V19.
+
+The headline cold-launch runs used USB power, animation scales set to `0`, and **2.5 GiB LZO-RLE ZRAM** with `vm.swappiness=140`. Google apps and modules describe the test environment; the kernel download does not include them. [Full benchmark configuration](docs/v19-validation.md#test-configuration).
+
 ## Built for this hardware
 
 | Component | V19 target |
