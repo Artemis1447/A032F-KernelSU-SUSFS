@@ -12,7 +12,9 @@ Each launch window contained 12 measured process-cold `am start -W` launches. Th
 | 7 minutes after boot | 1,011.5–1,025 / 1,035–1,039 ms | 1,001.5 / 1,023 ms | **1,000–1,002 / 1,030–1,044 ms** |
 | 15 minutes after boot | Not measured | Not measured | **993 / 1,024 ms** |
 
-V19's minimum was **975 ms** in the 15-minute series. The 743–800 ms historical target was not reached. Small gaps between kernels should be read alongside differences in device temperature and background paging. Settings scroll HWUI p95 was **12 ms** on V19 (0 janky frames of 423); V18 also measured 12 ms, and the two V17 scroll runs measured 19 ms and 12 ms. This is a short Settings workload, not a gaming or battery-life result.
+Pooling the 4- and 7-minute windows across both boots gives **1,029 → 1,012.5 ms** from V17 to V19 (48 launches per kernel, **16.5 ms or 1.6% lower**). Pooled p95 was essentially unchanged (**1,102 → 1,103 ms**). V19's minimum was **975 ms** in the 15-minute series. The 743–800 ms historical target was not reached. Small gaps between kernels should be read alongside differences in device temperature and background paging.
+
+Settings scroll HWUI p95 went **19 → 12 ms**, a **7 ms or 37% reduction** versus V17's first run (1 janky frame out of 424 → 0 out of 423). V17's repeat run and V18 already measured 12 ms p95. This is a short Settings workload, not a gaming or battery-life result.
 
 ## Memory and storage
 
@@ -22,7 +24,7 @@ V19's minimum was **975 ms** in the 15-minute series. The 743–800 ms historica
 | 8 MiB LZO-RLE write, median | 143.12–151.47 ms | 153.28 ms | **144.16 ms** |
 | 8 MiB LZ4 write, median | 147.88–156.43 ms | 156.34 ms | **149.51 ms** |
 
-ZRAM readback matched for both codecs. The production compressor was LZO-RLE. A separate F2FS file test produced a slightly faster direct read (79.76 → 76.02 ms) and a slower fsync write (137.76 → 144.82 ms) versus the second V17 boot. V19 began the bounded 60-second CPU load cooler than the other builds, so peak temperatures do not establish a power or thermal improvement.
+Compared with V18, V19 cut the direct eMMC read median by **2.93 ms (2.6%)** and the LZO-RLE write median by **9.12 ms (6.0%)**, bringing both back within the observed V17 range. ZRAM readback matched for both codecs. The production compressor was LZO-RLE. A separate F2FS file test produced a slightly faster direct read (79.76 → 76.02 ms) and a slower fsync write (137.76 → 144.82 ms) versus the second V17 boot. V19 began the bounded 60-second CPU load cooler than the other builds, so peak temperatures do not establish a power or thermal improvement.
 
 ## Build and boot checks
 

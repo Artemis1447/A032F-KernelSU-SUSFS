@@ -2,15 +2,23 @@
 
 **The most thoroughly validated Galaxy A03 Core kernel in this project.** V19 combines targeted latency work with the original vendor GPU ABI, and backs it up with two verified Android boots and 60 measured cold Settings launches on the **Samsung Galaxy A03 Core SM-A032F**.
 
-[**Download V19 build artifacts**](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325#artifacts) · [**Benchmarks and validation**](docs/v19-validation.md) · [**Build, install and roll back**](V19.md) · [**V17 recovery baseline**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124)
+[**Download V19 EXTREME**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v19-extreme-20261127) · [**Benchmarks and validation**](docs/v19-validation.md) · [**Build, install and roll back**](V19.md) · [**V17 recovery baseline**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124)
 
 ## The headline numbers
+
+| Measured improvement | Before → V19 | Difference |
+|---|---:|---:|
+| Settings scroll frame p95 vs. V17's first run | **19 → 12 ms** | **7 ms lower (37%)** |
+| Cold Settings launch median vs. V17, pooled 4- and 7-minute windows | **1,029 → 1,012.5 ms** | **16.5 ms lower (1.6%)** |
+| 8 MiB LZO-RLE write median vs. V18 | **153.28 → 144.16 ms** | **9.12 ms lower (6.0%)** |
+| 16 MiB direct eMMC read median vs. V18 | **113.13 → 110.20 ms** | **2.93 ms lower (2.6%)** |
+
+V17's repeat scroll test and V18 both already measured **12 ms p95**. The pooled cold-launch median uses 48 launches per kernel; its p95 was essentially unchanged (**1,102 → 1,103 ms**).
 
 | Metric on the reference SM-A032F | V19 EXTREME |
 |---|---:|
 | Settled Settings cold launch at 15 minutes | **993 ms median / 1,024 ms p95** |
 | Fastest measured V19 cold launch | **975 ms** |
-| Settings scroll frame time, p95 | **12 ms** |
 | Janky frames in the measured scroll | **0 / 423** |
 | Stock PowerVR symbol-version checks | **267 / 267 passed** |
 
@@ -36,13 +44,13 @@ V19 also brought direct eMMC read and LZO-RLE write medians back within the rang
 
 ## Download and build
 
-The verified [V19 Actions run](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325#artifacts) provides the raw `Image`, a device-scoped AnyKernel3 ZIP, integrated kernel source, a build manifest and SHA-256 checksums. Actions artifacts have **14-day retention**; if unavailable, dispatch a new build using the checked-in profile. `Image` is a kernel binary, not a complete Android Boot image. The hardware test used the repacked full Boot image through TWRP; the independently packaged AnyKernel3 ZIP was verified offline and was not used for that test.
+The [V19 release](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v19-extreme-20261127) includes the raw `Image`, a device-scoped AnyKernel3 ZIP, integrated kernel source, a build manifest, ABI reports and SHA-256 checksums from [the verified Actions run](https://github.com/Artemis1447/A032F-V19-EXTREME/actions/runs/45915725325). `Image` is the raw kernel for repacking a full Boot image. The hardware test used the repacked full Boot image through TWRP. The AnyKernel3 ZIP was verified offline.
 
 Build from **Actions → Build Kernel → Run workflow → `main`**. The default dispatch profile is [`config/a3core-a032f-v19-extreme.env`](config/a3core-a032f-v19-extreme.env). [Installation and rollback instructions](V19.md) explain how to preserve your own complete V17 Boot backup. Use the manager for SukiSU-Ultra; the build is not a KernelSU Next build.
 
 ## Project history and documentation
 
-- **V19 EXTREME:** current source and build profile on `main`; [`v19-extreme`](https://github.com/Artemis1447/A032F-V19-EXTREME/tree/v19-extreme) retains the development history.
+- **V19 EXTREME:** [latest release](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v19-extreme-20261127), with the current source and build profile on `main`. [`v19-extreme`](https://github.com/Artemis1447/A032F-V19-EXTREME/tree/v19-extreme) retains the development history.
 - **V18:** [stock-derived comparison build and results](V18.md).
 - **V17:** [published baseline and known-good rollback reference](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124).
 - **Build system:** [general workflow documentation](README_EN.md), based on [KernelSU Action](https://github.com/xiaoleGun/KernelSU_action). Kernel source: [IverCoder's Samsung A03 Core tree](https://github.com/IverCoder/android_kernel_samsung_a3core).
