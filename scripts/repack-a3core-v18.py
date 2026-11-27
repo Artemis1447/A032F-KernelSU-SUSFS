@@ -15,6 +15,10 @@ PARTITION = 64 * 1024 * 1024
 PAGE = 2048
 V17_IMAGE = '9b2f68f6b37a0031ffc7cec89c5239342328991e93c2d522019c9db498af98fe'
 TRAILER = b'SEANDROIDENFORCE'
+RELEASES = {
+    'v18': b'4.14.199-a3core-vendorabi-v18-sukisu-susfs',
+    'v19': b'4.14.199-a3core-v19-extreme-sukisu-susfs',
+}
 
 
 def align(size, block):
@@ -55,12 +59,12 @@ def boot_id(parts):
     return digest.digest() + bytes(12)
 
 
-def repack(original, kernel):
+def repack(original, kernel, release='v18'):
     parts, old_end = sections(original)
     require(hashlib.sha256(parts[0]).hexdigest() == V17_IMAGE, 'not the released V17 Image')
     require(original[576:608] == boot_id(parts), 'V17 boot header ID mismatch')
-    require(kernel[56:60] == b'ARM\x64' and b'Linux version 4.14.199-a3core-vendorabi-v18-sukisu-susfs ' in kernel,
-            'not the V18 arm64 Image')
+    require(kernel[56:60] == b'ARM\x64' and b'Linux version ' + RELEASES[release] + b' ' in kernel,
+            f'not the {release.upper()} arm64 Image')
     footer = bytearray(original[-64:])
     magic, major, minor, image_size, vbmeta_offset, vbmeta_size = struct.unpack_from('>4sIIQQQ', footer)
     require((magic, major, minor) == (b'AVBf', 1, 0) and image_size == old_end + len(TRAILER),
@@ -98,8 +102,15 @@ def main():
     parser.add_argument('v17_backup', type=Path)
     parser.add_argument('kernel', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--release', choices=RELEASES, default='v18')
+    parser.add_argument('--image-sha256', help='required for a V19 Image; use the CI manifest checksum')
     args = parser.parse_args()
-    image = repack(args.v17_backup.read_bytes(), args.kernel.read_bytes())
+    kernel = args.kernel.read_bytes()
+    if args.release == 'v19' and args.image_sha256 is None:
+        parser.error('--image-sha256 is required for V19')
+    if args.image_sha256 and hashlib.sha256(kernel).hexdigest() != args.image_sha256.lower():
+        parser.error('kernel checksum mismatch')
+    image = repack(args.v17_backup.read_bytes(), kernel, args.release)
     with args.output.open('xb') as out:
         try:
             out.write(image)
