@@ -41,7 +41,7 @@ for sample in 1 2 3 4 5 6; do
     echo "# settings tids: $(ls "/proc/$pid/task" | tr '\n' ' ')"
     echo "# persistent tids: $(pidof system_server surfaceflinger)"
     logcat -b main -b system -v monotonic -d -t 800 -s TopLevelSettings:D ActivityTaskManager:I 2>/dev/null | \
-        grep -E "^[[:space:]]*[0-9.]+[[:space:]]+$pid[[:space:]].*All preferences added|Displayed com.android.settings/" | tail -6 || true
+        grep -E "^[[:space:]]*[0-9.]+[[:space:]]+${pid}[[:space:]].*All preferences added|Displayed com.android.settings/" | tail -6 || true
     cat "$instance/trace"
     sleep 2
 done
