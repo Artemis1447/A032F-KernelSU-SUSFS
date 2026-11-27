@@ -2,7 +2,7 @@
 
 ![A03 Core V19 EXTREME banner — SM-A032F, LineageOS 21, SukiSU-Ultra and SUSFS ABI 2](docs/assets/v19-banner.svg)
 
-**The most thoroughly validated Galaxy A03 Core kernel in this project.** V19 combines targeted latency work with the original vendor GPU ABI, and backs it up with two verified Android boots and 60 measured cold Settings launches on the **Samsung Galaxy A03 Core SM-A032F**.
+**The most thoroughly validated Galaxy A03 Core kernel in this project.** V19 combines targeted latency work with the original vendor GPU ABI, a **Samsung Galaxy A03 Core SM-A032F**.
 
 [**Download V19 EXTREME**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v19-extreme-20261127) · [**Benchmarks and validation**](docs/v19-validation.md) · [**Build, install and roll back**](V19.md) · [**V17 recovery baseline**](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124)
 
