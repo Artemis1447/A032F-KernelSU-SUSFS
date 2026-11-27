@@ -43,11 +43,21 @@ for profile in stock no_schedstats prefer_idle swap_ra2 \
     apply "$@"
     input keyevent KEYCODE_HOME
     for warmup in 1 0 0 0 0; do
-        am force-stop --user 0 com.android.settings
-        sleep 1
-        result=$(am start -W -a android.settings.SETTINGS)
-        if ! printf '%s\n' "$result" | grep -qx 'LaunchState: COLD'; then
-            echo "invalid $profile $block" >&2
+        result=
+        for retry in 0 1 2; do
+            am force-stop --user 0 com.android.settings
+            sleep 1
+            result=$(am start -W -a android.settings.SETTINGS)
+            printf '%s\n' "$result" | grep -qx 'Status: ok' || exit 1
+            if printf '%s\n' "$result" | grep -qx 'LaunchState: COLD'; then
+                break
+            fi
+            echo "# retry $profile $block $retry: $(printf '%s\n' "$result" | grep '^LaunchState:')"
+            result=
+            sleep 2
+        done
+        if [ -z "$result" ]; then
+            echo "no cold launch after three attempts: $profile $block" >&2
             exit 1
         fi
         ms=$(printf '%s\n' "$result" | awk '/^TotalTime: [0-9]+$/ {print $2}')
