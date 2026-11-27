@@ -1,0 +1,28 @@
+From 0604c5be71dab5da8389e7520e9a9acc3cb9e4da Mon Sep 17 00:00:00 2001
+From: Artemis1447 <Artemis1447@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 01:06:21 +0100
+Subject: [PATCH 4/5] schedutil: skip the retry wakeup for already saturated
+ cluster votes
+
+---
+ kernel/sched/cpufreq_schedutil.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index 089167aa54500d3e539d9aad7837d113684501ef..0191accc7f83d3bdbc9e6fafa93a05ac64de6b69 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -552,7 +552,12 @@ static void sugov_update_shared(struct update_util_data *hook, u64 time,
+ 		sugov_performance_htimer_cancel(sg_policy);
+ 
+ 		sugov_update_commit(sg_policy, time, next_f);
+-	} else if (within_limit) {
++	} else if (within_limit &&
++		   !(sg_policy->next_freq == sg_policy->policy->max &&
++		     sg_policy->policy->cur == sg_policy->policy->max &&
++		     ((flags & SCHED_CPUFREQ_DL) ||
++		      (util == max && sg_policy->tunables->freq_margin >= 0)))) {
++		/* A saturated vote at the allowed maximum needs no retry wakeup. */
+ 		sugov_performance_htimer_start(sg_policy, time);
+ 	}
+ 

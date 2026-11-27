@@ -1,0 +1,37 @@
+From bf4849bc62dab915d36eb1aafbe737874a4a2020 Mon Sep 17 00:00:00 2001
+From: Artemis1447 <Artemis1447@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 01:06:22 +0100
+Subject: [PATCH 5/5] input: nvt: use devres for failed OF probe cleanup
+
+---
+ drivers/input/touchscreen/nvt_touch/nt36xxx.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/input/touchscreen/nvt_touch/nt36xxx.c b/drivers/input/touchscreen/nvt_touch/nt36xxx.c
+index a03e65ea7e8d56d24ca7465ce95b5636aa0c1728..4f223e08161dfb05edb4a227a1ce6106fc0d7709 100644
+--- a/drivers/input/touchscreen/nvt_touch/nt36xxx.c
++++ b/drivers/input/touchscreen/nvt_touch/nt36xxx.c
+@@ -2242,6 +2242,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
+ 		platdata = devm_kzalloc(&client->dev,sizeof(struct nvt_ts_platdata), GFP_KERNEL);
+ 		if (!platdata) {
+ 			input_err(true, &client->dev, "%s: Failed to allocate platform data\n", __func__);
++			ret = -ENOMEM;
+ 			goto err_alloc_platdata_failed;
+ 		}
+ 
+@@ -2641,10 +2642,11 @@ static int32_t nvt_ts_probe(struct spi_device *client)
+ 	nvt_gpio_deconfig(ts);
+ err_gpio_config_failed:
+ err_parse_dt_failed:
+-	if (ts->platdata) {
+-		devm_kfree(&client->dev, ts->platdata);
+-		ts->platdata = NULL;
+-	}
++	/* Probe failure releases the OF allocation through devres. This path
++	 * can run before ts->platdata has been initialized.
++	 */
++	if (client->dev.of_node)
++		client->dev.platform_data = NULL;
+ err_alloc_platdata_failed:
+ 	if (ts->rbuf) {
+ 		kfree(ts->rbuf);

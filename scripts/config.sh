@@ -64,6 +64,7 @@ declare -A DEFAULTS=(
 	[SUSFS_BRANCH]="auto"
 	[SUSFS_COMMIT]=""
 	[A3CORE_V18_PERF]="false"
+	[A3CORE_V19_EXTREME]="false"
 	[ENABLE_PATH_UMOUNT]="false"
 	[ENABLE_HIDE_STUFF]="false"
 	[ENABLE_KPM]="false"
@@ -293,6 +294,10 @@ for key in $(printf '%s\n' "${!CFG[@]}" | sort); do
 done
 endgroup
 
-export_env BUILD_TIME "$(TZ=${BUILD_TZ:-Asia/Shanghai} date '+%Y%m%d%H%M')"
+if is_true "${CFG[A3CORE_V19_EXTREME]}"; then
+	export_env BUILD_TIME "$(date -u '+%Y%m%dT%H%M%SZ')-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+else
+	export_env BUILD_TIME "$(TZ=${BUILD_TZ:-Asia/Shanghai} date '+%Y%m%d%H%M')"
+fi
 
 ok "configuration resolved (device: ${DEVICE})"

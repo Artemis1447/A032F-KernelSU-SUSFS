@@ -2,3 +2,4 @@
 # upstream trees. They are diff data, not whitespace errors in this repository.
 patches/*.patch -whitespace
 patches/v18/*.patch -whitespace
+patches/v19/*.patch -whitespace

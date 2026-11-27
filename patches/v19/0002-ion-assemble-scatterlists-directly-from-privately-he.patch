@@ -1,0 +1,163 @@
+From 480ebf1755711c6893440b63c877cf2c9656f9cf Mon Sep 17 00:00:00 2001
+From: Artemis1447 <Artemis1447@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 01:06:21 +0100
+Subject: [PATCH 2/5] ion: assemble scatterlists directly from privately held
+ pages
+
+---
+ drivers/staging/android/ion/ion_system_heap.c | 88 ++++++-------------
+ 1 file changed, 25 insertions(+), 63 deletions(-)
+
+diff --git a/drivers/staging/android/ion/ion_system_heap.c b/drivers/staging/android/ion/ion_system_heap.c
+index 9d91c71835857bc39244ad5117dc749409299878..f1e2646844fa848c4c43feac4c8b0a4b56b860d0 100644
+--- a/drivers/staging/android/ion/ion_system_heap.c
++++ b/drivers/staging/android/ion/ion_system_heap.c
+@@ -59,13 +59,6 @@ struct ion_system_heap {
+ 	struct ion_page_pool *cached_pools[NUM_ORDERS];
+ };
+ 
+-struct page_info {
+-	struct page *page;
+-	bool from_pool;
+-	unsigned int order;
+-	struct list_head list;
+-};
+-
+ /**
+  * The page from page-pool are all zeroed before. We need do cache
+  * clean for cached buffer. The uncached buffer are always non-cached
+@@ -111,15 +104,14 @@ static void free_buffer_page(struct ion_system_heap *heap,
+ 	ion_page_pool_free(pool, page);
+ }
+ 
+-static struct page_info *alloc_largest_available(struct ion_system_heap *heap,
++static struct page *alloc_largest_available(struct ion_system_heap *heap,
+ 						 struct ion_buffer *buffer,
+ 						 unsigned long size,
+-						 unsigned int max_order)
++						 unsigned int max_order,
++						 bool *from_pool)
+ {
+ 	struct page *page;
+-	struct page_info *info;
+ 	int i;
+-	bool from_pool;
+ 
+ 	for (i = 0; i < NUM_ORDERS; i++) {
+ 		if (size < order_to_size(orders[i]))
+@@ -127,28 +119,14 @@ static struct page_info *alloc_largest_available(struct ion_system_heap *heap,
+ 		if (max_order < orders[i])
+ 			continue;
+ 
+-		page = alloc_buffer_page(heap, buffer, orders[i], &from_pool);
+-		if (!page)
+-			continue;
+-
+-		info = kmalloc(sizeof(*info), GFP_KERNEL);
+-		if (info) {
+-			info->page = page;
+-			info->order = orders[i];
+-			info->from_pool = from_pool;
+-		}
+-		return info;
++		page = alloc_buffer_page(heap, buffer, orders[i], from_pool);
++		if (page)
++			return page;
+ 	}
+ 
+ 	return NULL;
+ }
+ 
+-void set_sg_info(struct page_info *info, struct scatterlist *sg)
+-{
+-	sg_set_page(sg, info->page, (1 << info->order) * PAGE_SIZE, 0);
+-	list_del(&info->list);
+-	kfree(info);
+-}
+ static int ion_system_heap_allocate(struct ion_heap *heap,
+ 				    struct ion_buffer *buffer,
+ 				    unsigned long size,
+@@ -164,8 +142,8 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
+ 	int i = 0;
+ 	unsigned long size_remaining = PAGE_ALIGN(size);
+ 	unsigned int max_order = orders[0];
+-	unsigned int sz;
+-	struct page_info *info, *tmp_info;
++	struct page *page, *pooled, *next;
++	bool from_pool;
+ 
+ 	if (size / PAGE_SIZE > totalram_pages / 2)
+ 		return -ENOMEM;
+@@ -173,19 +151,15 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
+ 	INIT_LIST_HEAD(&pages);
+ 	INIT_LIST_HEAD(&pages_from_pool);
+ 	while (size_remaining > 0) {
+-		info = alloc_largest_available(sys_heap, buffer, size_remaining,
+-					       max_order);
+-		if (!info)
++		page = alloc_largest_available(sys_heap, buffer, size_remaining,
++					       max_order, &from_pool);
++		if (!page)
+ 			goto free_pages;
+ 
+-		sz = (1 << info->order) * PAGE_SIZE;
+-		if (info->from_pool)
+-			list_add_tail(&info->list, &pages_from_pool);
+-		else
+-			list_add_tail(&info->list, &pages);
+-
+-		size_remaining -= sz;
+-		max_order = info->order;
++		/* These private compound heads are off the buddy and pool lists. */
++		list_add_tail(&page->lru, from_pool ? &pages_from_pool : &pages);
++		max_order = compound_order(page);
++		size_remaining -= order_to_size(max_order);
+ 		i++;
+ 	}
+ 
+@@ -198,21 +172,12 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
+ 
+ 	sg = table->sgl;
+ 	do {
+-		info = list_first_entry_or_null(&pages, struct page_info, list);
+-		tmp_info = list_first_entry_or_null(&pages_from_pool,
+-						    struct page_info, list);
+-		if (info && tmp_info) {
+-			if (info->order >= tmp_info->order)
+-				set_sg_info(info, sg);
+-			else
+-				set_sg_info(tmp_info, sg);
+-		} else if (info) {
+-			set_sg_info(info, sg);
+-		} else if (tmp_info) {
+-			set_sg_info(tmp_info, sg);
+-		} else {
+-			WARN_ON(1);
+-		}
++		page = list_first_entry_or_null(&pages, struct page, lru);
++		pooled = list_first_entry_or_null(&pages_from_pool, struct page, lru);
++		if (!page || (pooled && compound_order(pooled) > compound_order(page)))
++			page = pooled;
++		list_del(&page->lru);
++		sg_set_page(sg, page, order_to_size(compound_order(page)), 0);
+ 		sg = sg_next(sg);
+ 	} while (sg);
+ 
+@@ -222,13 +187,10 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
+ free_table:
+ 	kfree(table);
+ free_pages:
+-	list_for_each_entry_safe(info, tmp_info, &pages, list) {
+-		free_buffer_page(sys_heap, buffer, info->page);
+-		kfree(info);
+-	}
+-	list_for_each_entry_safe(info, tmp_info, &pages_from_pool, list) {
+-		free_buffer_page(sys_heap, buffer, info->page);
+-		kfree(info);
++	list_splice_tail_init(&pages_from_pool, &pages);
++	list_for_each_entry_safe(page, next, &pages, lru) {
++		list_del(&page->lru);
++		free_buffer_page(sys_heap, buffer, page);
+ 	}
+ 	return -ENOMEM;
+ }

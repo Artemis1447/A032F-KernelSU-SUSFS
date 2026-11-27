@@ -81,10 +81,18 @@ susfs_apply() {
 	[ -n "$kernel_patch" ] && [ -f "$kernel_patch" ] \
 		|| die "no 50_add_susfs_in_*.patch found in ${kp}"
 
+	if is_true "${A3CORE_V19_EXTREME:-false}"; then
+		# Exact-context replay of the pinned V17 port. The integration check
+		# also compares its final source files with the boot-tested tree.
+		kernel_patch="$REPO_ROOT/patches/a3core-v19-susfs-baseline.patch"
+		git -C "$KERNEL_DIR" apply --check "$kernel_patch"
+		git -C "$KERNEL_DIR" apply --whitespace=nowarn "$kernel_patch"
+	else
 	( cd "$KERNEL_DIR" && apply_patch "$kernel_patch" 1 ) \
 		|| die "the SUSFS kernel patch did not apply cleanly.
        This usually means SUSFS_BRANCH does not match your kernel. Detected
        kernel ${kver}, used branch '${branch}'."
+	fi
 
 	# 3. Patch the KernelSU side -- but only when the variant does not already
 	#    ship SUSFS support. SukiSU-Ultra's 'builtin' branch, for instance,
@@ -391,6 +399,11 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 			if is_true "${A3CORE_V18_PERF:-false}"; then
 				git -C "$KERNEL_DIR" apply --check --whitespace=error "$REPO_ROOT"/patches/v18/*.patch
 				git -C "$KERNEL_DIR" apply --whitespace=error "$REPO_ROOT"/patches/v18/*.patch
+			fi
+			if is_true "${A3CORE_V19_EXTREME:-false}"; then
+				for p in "$REPO_ROOT"/patches/v19/*.patch; do
+					git -C "$KERNEL_DIR" apply --whitespace=error "$p"
+				done
 			fi
 			;;
 		*) die "unknown patch step '$1'" ;;

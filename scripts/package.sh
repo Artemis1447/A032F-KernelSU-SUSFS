@@ -31,6 +31,10 @@ make_anykernel3() {
 				fetch "$src" "${WORKSPACE}/ak3.zip"
 				extract_archive "${WORKSPACE}/ak3.zip" "$AK3" ;;
 		esac
+	elif is_true "${A3CORE_V19_EXTREME:-false}"; then
+		retry 3 git clone -q --depth=1 https://github.com/osm0sis/AnyKernel3 "$AK3"
+		checkout_pinned_commit "$AK3" 41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1
+		cp "$(dirname "${BASH_SOURCE[0]}")/../config/v19/anykernel.sh" "$AK3/anykernel.sh"
 	else
 		retry 3 git clone -q --depth=1 https://github.com/osm0sis/AnyKernel3 "$AK3" \
 			|| die "failed to clone AnyKernel3"
@@ -110,7 +114,10 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 	case "${1:-all}" in
 		anykernel3) make_anykernel3 ;;
 		bootimg)    make_boot_image ;;
-		all)        make_anykernel3; make_boot_image; archive_v18_source; write_summary ;;
+		all)        make_anykernel3; make_boot_image; archive_v18_source; write_summary
+			if is_true "${A3CORE_V19_EXTREME:-false}"; then
+				python3 "$(dirname "${BASH_SOURCE[0]}")/verify-a3core-v19.py"
+			fi ;;
 		*) die "unknown package step '$1'" ;;
 	esac
 fi

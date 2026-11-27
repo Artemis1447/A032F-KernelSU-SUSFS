@@ -1,0 +1,38 @@
+From 701fb8a67d6f03b32b4a4907d20b60773664faf9 Mon Sep 17 00:00:00 2001
+From: Artemis1447 <Artemis1447@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 01:06:21 +0100
+Subject: [PATCH 3/5] zram: record access under the successful slot publication
+ lock
+
+---
+ drivers/block/zram/zram_drv.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 3a78d6247073629088a46768050d1fe8bb451ec9..9c43d6a3d85091d64e0307466d30392e18f390c2 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -3112,6 +3112,8 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
+ 		}
+ #endif
+ 	}
++	/* Mark the newly published slot while its write lock is still held. */
++	zram_accessed(zram, index);
+ 	zram_slot_unlock(zram, index);
+ 
+ 	/* Update stats */
+@@ -3229,9 +3231,11 @@ static int zram_bvec_rw(struct zram *zram, struct bio_vec *bvec, u32 index,
+ 
+ 	generic_end_io_acct(q, rw_acct, &zram->disk->part0, start_time);
+ 
+-	zram_slot_lock(zram, index);
+-	zram_accessed(zram, index);
+-	zram_slot_unlock(zram, index);
++	if (!is_write || ret) {
++		zram_slot_lock(zram, index);
++		zram_accessed(zram, index);
++		zram_slot_unlock(zram, index);
++	}
+ 
+ 	if (unlikely(ret < 0)) {
+ 		if (!is_write)
