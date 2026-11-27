@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="739" viewBox="0 0 1080 739" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">A03 Core V19 EXTREME benchmark comparison</title>
+  <desc id="chart-description">Settings scroll frame p95: 19 to 12 milliseconds versus the first V17 run; the V17 repeat and V18 both measured 12. Pooled cold Settings median: 1,029 to 1,012.5 milliseconds versus V17, with 48 launches per kernel. Versus V18, ZRAM write median: 153.28 to 144.16 milliseconds; direct eMMC read median: 113.13 to 110.20 milliseconds. All bars start at zero, with a separate scale for each panel.</desc>
+  <style>
+    text { font-family: "Segoe UI", Arial, sans-serif; }
+    .title { fill: #f1f7fc; font-size: 35px; font-weight: 750; }
+    .subtitle { fill: #b9cddd; font-size: 17px; }
+    .metric { fill: #eff7fc; font-size: 23px; font-weight: 700; }
+    .row { fill: #d7e5ef; font-size: 16px; font-weight: 600; }
+    .number { fill: #eff7fc; font-size: 20px; font-weight: 700; text-anchor: end; font-variant-numeric: tabular-nums; }
+    .v19 { fill: #74ecd3; }
+    .card { fill: #162438; stroke: #35516b; }
+    .track { fill: #293e54; }
+    .baseline { fill: #f7c77f; }
+    .delta { fill: #93f9e3; font-size: 17px; font-weight: 700; }
+    .note { fill: #b9cddd; font-size: 15px; }
+  </style>
+
+  <rect x="1" y="1" width="1078" height="737" rx="23" fill="#101c2f" stroke="#35516b" stroke-width="2"/>
+  <text x="36" y="57" class="title">V19 EXTREME: benchmark comparison</text>
+  <text x="36" y="88" class="subtitle">One SM-A032F handset · LineageOS 21 · BiTGApps enabled</text>
+
+  <g transform="translate(36 116)">
+    <rect width="492" height="266" rx="16" class="card"/>
+    <text x="22" y="40" class="metric">Settings scroll frame p95</text>
+    <text x="22" y="80" class="row">V17 · first run</text>
+    <text x="470" y="80" class="number">19 ms</text>
+    <rect x="22" y="91" width="448" height="10" class="track"/>
+    <rect x="22" y="91" width="425.6" height="10" class="baseline"/>
+    <text x="22" y="132" class="row">V19 EXTREME</text>
+    <text x="470" y="132" class="number v19">12 ms</text>
+    <rect x="22" y="143" width="448" height="10" class="track"/>
+    <rect x="22" y="143" width="268.8" height="10" class="v19"/>
+    <path d="M22 173H470" stroke="#35516b"/>
+    <text x="22" y="201" class="delta">7 ms lower (37%) vs. V17's first run</text>
+    <text x="22" y="229" class="note">V17's repeat run and V18 also measured 12 ms p95.</text>
+  </g>
+
+  <g transform="translate(552 116)">
+    <rect width="492" height="266" rx="16" class="card"/>
+    <text x="22" y="40" class="metric">Cold Settings launch median</text>
+    <text x="22" y="80" class="row">V17</text>
+    <text x="470" y="80" class="number">1,029 ms</text>
+    <rect x="22" y="91" width="448" height="10" class="track"/>
+    <rect x="22" y="91" width="419.1" height="10" class="baseline"/>
+    <text x="22" y="132" class="row">V19 EXTREME</text>
+    <text x="470" y="132" class="number v19">1,012.5 ms</text>
+    <rect x="22" y="143" width="448" height="10" class="track"/>
+    <rect x="22" y="143" width="412.4" height="10" class="v19"/>
+    <path d="M22 173H470" stroke="#35516b"/>
+    <text x="22" y="201" class="delta">16.5 ms lower (1.6%)</text>
+    <text x="22" y="229" class="note">48 launches per kernel, pooled at 4 and 7 minutes.</text>
+    <text x="22" y="251" class="note">Pooled p95: 1,102 → 1,103 ms.</text>
+  </g>
+
+  <g transform="translate(36 406)">
+    <rect width="492" height="243" rx="16" class="card"/>
+    <text x="22" y="40" class="metric">LZO-RLE ZRAM write median</text>
+    <text x="22" y="80" class="row">V18</text>
+    <text x="470" y="80" class="number">153.28 ms</text>
+    <rect x="22" y="91" width="448" height="10" class="track"/>
+    <rect x="22" y="91" width="429.2" height="10" class="baseline"/>
+    <text x="22" y="132" class="row">V19 EXTREME</text>
+    <text x="470" y="132" class="number v19">144.16 ms</text>
+    <rect x="22" y="143" width="448" height="10" class="track"/>
+    <rect x="22" y="143" width="403.6" height="10" class="v19"/>
+    <path d="M22 173H470" stroke="#35516b"/>
+    <text x="22" y="201" class="delta">9.12 ms lower (6.0%)</text>
+    <text x="22" y="229" class="note">8 MiB test; back within the observed V17 range.</text>
+  </g>
+
+  <g transform="translate(552 406)">
+    <rect width="492" height="243" rx="16" class="card"/>
+    <text x="22" y="40" class="metric">Direct eMMC read median</text>
+    <text x="22" y="80" class="row">V18</text>
+    <text x="470" y="80" class="number">113.13 ms</text>
+    <rect x="22" y="91" width="448" height="10" class="track"/>
+    <rect x="22" y="91" width="422.4" height="10" class="baseline"/>
+    <text x="22" y="132" class="row">V19 EXTREME</text>
+    <text x="470" y="132" class="number v19">110.20 ms</text>
+    <rect x="22" y="143" width="448" height="10" class="track"/>
+    <rect x="22" y="143" width="411.4" height="10" class="v19"/>
+    <path d="M22 173H470" stroke="#35516b"/>
+    <text x="22" y="201" class="delta">2.93 ms lower (2.6%)</text>
+    <text x="22" y="229" class="note">16 MiB test; back within the observed V17 range.</text>
+  </g>
+
+  <text x="36" y="687" class="subtitle">Lower is better. All bars start at 0 ms; each panel uses its own scale.</text>
+  <text x="36" y="715" class="note">V17 and V18 comparison runs used the same handset and ROM.</text>
+</svg>

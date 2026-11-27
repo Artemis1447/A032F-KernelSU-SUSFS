@@ -17,6 +17,8 @@ The V17/V18/V19 cold-launch runs recorded the same ROM, enabled module set and s
 
 ## Settings launch and rendering
 
+[Benchmark comparison chart (SVG)](assets/v19-benchmarks.svg)
+
 Each launch window contained 12 measured process-cold `am start -W` launches. The four- and seven-minute windows used the same handset and ROM. There were two measured V17 boots, one V18 boot, and two V19 boots. p95 is the nearest-rank percentile; with 12 samples it equals the largest observed time in that window.
 
 | Cold Settings launch | V17 median / p95 | V18 median / p95 | V19 median / p95 |
