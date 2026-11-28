@@ -66,3 +66,14 @@ Build from **Actions → Build Kernel → Run workflow → `main`**. The default
 - **V18:** [stock-derived comparison build and results](V18.md).
 - **V17:** [published baseline and known-good rollback reference](https://github.com/Artemis1447/A032F-V19-EXTREME/releases/tag/a3core-v17-sukisu-susfs-20261124).
 - **Build system:** [general workflow documentation](README_EN.md), based on [KernelSU Action](https://github.com/xiaoleGun/KernelSU_action). Kernel source: [IverCoder's Samsung A03 Core tree](https://github.com/IverCoder/android_kernel_samsung_a3core).
+
+☕ Support My Development​
+Enjoying my research and tools?
+
+If my work helps you, please consider supporting future development, testing, and documentation.
+
+Every coffee helps me spend more time researching Samsung devices, MediaTek bootloaders, custom kernels, and Android development.
+
+Support my work: https://ko-fi.com/R3O72BFTE4
+
+Thank you for supporting independent development!
